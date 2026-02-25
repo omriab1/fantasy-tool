@@ -15,9 +15,8 @@ export function NavTabs() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#1a1f2e] border-b border-white/10">
       <div className="max-w-5xl mx-auto flex items-center h-14 px-3">
-        <span className="text-white font-bold text-sm tracking-widest uppercase mr-4 sm:mr-8 shrink-0">
-          <span className="hidden sm:inline">🏀 Fantasy Tool</span>
-          <span className="sm:hidden">🏀</span>
+        <span className="text-white font-bold text-sm tracking-widest uppercase mr-8 shrink-0">
+          🏀 Fantasy Tool
         </span>
         <div className="flex gap-1 overflow-x-auto">
           {TABS.map((tab) => {
