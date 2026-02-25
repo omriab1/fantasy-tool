@@ -112,7 +112,7 @@ export default function SettingsPage() {
           Drag the button below to your bookmarks bar. Then open your ESPN Fantasy league page and click it — your credentials will fill in automatically.
         </p>
 
-        <div className="flex items-center gap-4 mb-5">
+        <div className="flex flex-wrap items-center gap-4 mb-5">
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
             ref={bookmarkRef}
@@ -219,7 +219,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60 ${mono ? "font-mono" : ""}`}
+        className={`w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60 min-w-0 ${mono ? "font-mono" : ""}`}
       />
     </div>
   );
