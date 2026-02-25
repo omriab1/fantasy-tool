@@ -79,6 +79,7 @@ export interface LeagueTeam {
   abbreviation: string;
   ownerId: string;
   rosterPlayerIds: number[];
+  logo?: string;
 }
 
 export interface LeagueInfo {

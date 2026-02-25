@@ -32,6 +32,7 @@ function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
       abbreviation: (team.abbrev as string) ?? "",
       ownerId: primaryOwner.toLowerCase(),
       rosterPlayerIds,
+      logo: (team.logo as string) || undefined,
     };
   });
 

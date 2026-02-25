@@ -78,6 +78,8 @@ export default function ComparePage() {
 
   const teamAName = useMemo(() => league?.teams.find((t) => t.id === teamAId)?.name ?? "Team A", [league, teamAId]);
   const teamBName = useMemo(() => league?.teams.find((t) => t.id === teamBId)?.name ?? "Team B", [league, teamBId]);
+  const teamALogo = useMemo(() => league?.teams.find((t) => t.id === teamAId)?.logo, [league, teamAId]);
+  const teamBLogo = useMemo(() => league?.teams.find((t) => t.id === teamBId)?.logo, [league, teamBId]);
 
   const handleCompare = useCallback(async () => {
     if (!teamAId || !teamBId || !leagueId || !espnS2 || !swid || !league) return;
@@ -229,6 +231,8 @@ export default function ComparePage() {
                 teamBName={teamBName}
                 teamAWins={teamAWins}
                 teamBWins={teamBWins}
+                teamALogo={teamALogo}
+                teamBLogo={teamBLogo}
               />
               <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
                 <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
