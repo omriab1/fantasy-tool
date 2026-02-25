@@ -48,17 +48,24 @@ export function VerdictBanner(props: Props) {
 
   return (
     <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-5 text-center">
-      <p className="text-gray-400 text-sm mb-2 uppercase tracking-widest">Matchup score</p>
-      <div className="flex items-center justify-center gap-3 flex-wrap">
-        <span className={`text-xl font-bold truncate max-w-[35%] ${teamAWins > teamBWins ? "text-green-400" : "text-gray-300"}`}>
-          {teamAName}
-        </span>
-        <span className="text-3xl font-bold font-mono text-white whitespace-nowrap">
-          {teamAWins} — {teamBWins}
-        </span>
-        <span className={`text-xl font-bold truncate max-w-[35%] ${teamBWins > teamAWins ? "text-green-400" : "text-gray-300"}`}>
-          {teamBName}
-        </span>
+      <p className="text-gray-400 text-sm mb-3 uppercase tracking-widest">Matchup score</p>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between px-2">
+          <span className={`font-bold text-lg truncate mr-4 ${teamAWins > teamBWins ? "text-green-400" : "text-gray-400"}`}>
+            {teamAName}
+          </span>
+          <span className={`font-mono text-3xl font-bold shrink-0 ${teamAWins > teamBWins ? "text-green-400" : "text-gray-300"}`}>
+            {teamAWins}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-2">
+          <span className={`font-bold text-lg truncate mr-4 ${teamBWins > teamAWins ? "text-red-400" : "text-gray-400"}`}>
+            {teamBName}
+          </span>
+          <span className={`font-mono text-3xl font-bold shrink-0 ${teamBWins > teamAWins ? "text-red-400" : "text-gray-300"}`}>
+            {teamBWins}
+          </span>
+        </div>
       </div>
     </div>
   );
