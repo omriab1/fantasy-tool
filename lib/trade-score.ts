@@ -26,7 +26,8 @@ export function calcTradeScore(giving: AggregatedStats, receiving: AggregatedSta
       winner = delta > 0 ? "receiving" : "giving";
     }
 
-    return { category: cat, giving: g, receiving: r, delta, winner };
+    // Return rounded values so the table display is always consistent with the delta/winner
+    return { category: cat, giving: rg, receiving: rr, delta, winner };
   });
 
   const winsForReceiving = results.filter((r) => r.winner === "receiving").length;
