@@ -5,6 +5,12 @@ import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
 import type { PlayerStats, StatsWindow } from "@/lib/types";
 import { STAT_IDS } from "@/lib/types";
 
+// ESPN eligibleSlots 0-4 are the real position slots
+const SLOT_POS: Record<number, string> = {
+  0: "PG", 1: "SG", 2: "SF", 3: "PF", 4: "C",
+};
+
+// Fallback for defaultPositionId
 const POS_MAP: Record<number, string> = {
   1: "PG", 2: "SG", 3: "SF", 4: "PF", 5: "C",
   6: "PG/SG", 7: "SG/SF", 8: "SF/PF", 9: "PF/C",
@@ -50,11 +56,16 @@ function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): 
 
   const posId = (info.defaultPositionId as number) ?? 9;
 
+  // Build position string from eligibleSlots (ESPN order), filtering to real position slots only
+  const eligibleSlots = (info.eligibleSlots as number[]) ?? [];
+  const posList = [...new Set(eligibleSlots.filter((s) => s in SLOT_POS).map((s) => SLOT_POS[s]))];
+  const position = posList.length > 0 ? posList.join(", ") : (POS_MAP[posId] ?? "UT");
+
   return {
     playerId: (entry.id as number) ?? 0,
     playerName: (info.fullName as string) ?? "Unknown",
-    teamAbbrev: String(info.proTeamId ?? "FA"),
-    position: POS_MAP[posId] ?? "UT",
+    teamAbbrev: String(info.proTeamId ?? "0"),
+    position,
     // Store totals — aggregateStats will sum these and divide by total GP
     pts: get(STAT_IDS.PTS),
     reb: get(STAT_IDS.REB),

@@ -20,13 +20,24 @@ export function PlayerBucket({ label, players, onRemove, accentClass = "border-w
               key={p.playerId}
               className="flex items-center gap-2 text-sm bg-white/5 rounded-lg px-3 py-2"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.playerId}.png`}
-                alt=""
-                className="w-8 h-8 rounded-full object-cover bg-white/10 shrink-0"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
-              />
+              <div className="relative shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.playerId}.png`}
+                  alt=""
+                  className="w-8 h-8 rounded-full object-cover bg-white/10"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+                {p.teamAbbrev !== "0" && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`https://a.espncdn.com/i/teamlogos/nba/500/${p.teamAbbrev}.png`}
+                    alt=""
+                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full object-cover bg-[#1a1f2e] ring-1 ring-[#1a1f2e]"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                )}
+              </div>
               <span className="flex-1 text-white font-medium">{p.playerName}</span>
               <span className="text-gray-500 text-xs">{p.position}</span>
               <button

@@ -64,13 +64,24 @@ export function PlayerSearch({ players, onAdd, placeholder = "Search players…"
                 onMouseDown={() => handleSelect(p)}
                 className="w-full text-left px-3 py-2 hover:bg-white/5 flex items-center gap-2 text-sm"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.playerId}.png`}
-                  alt=""
-                  className="w-8 h-8 rounded-full object-cover bg-white/10 shrink-0"
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
-                />
+                <div className="relative shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.playerId}.png`}
+                    alt=""
+                    className="w-8 h-8 rounded-full object-cover bg-white/10"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                  {p.teamAbbrev !== "0" && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`https://a.espncdn.com/i/teamlogos/nba/500/${p.teamAbbrev}.png`}
+                      alt=""
+                      className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full object-cover bg-[#1a1f2e] ring-1 ring-[#1a1f2e]"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
+                </div>
                 <span className="text-white font-medium flex-1">{p.playerName}</span>
                 <span className="text-gray-500 text-xs shrink-0">{p.position}</span>
               </button>
