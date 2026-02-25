@@ -18,7 +18,19 @@ export function calcTradeScore(giving: AggregatedStats, receiving: AggregatedSta
     const lowerIsBetter = LOWER_IS_BETTER.includes(cat as typeof LOWER_IS_BETTER[number]);
 
     if (delta === 0) {
-      winner = "push";
+      if (isPct) {
+        // Raw-value tiebreaker: display rounds to same value but actual values may differ
+        const rawDiff = r - g;
+        if (rawDiff === 0) {
+          winner = "push";
+        } else if (lowerIsBetter) {
+          winner = rawDiff < 0 ? "receiving" : "giving";
+        } else {
+          winner = rawDiff > 0 ? "receiving" : "giving";
+        }
+      } else {
+        winner = "push";
+      }
     } else if (lowerIsBetter) {
       // For TO, receiving fewer is better → delta < 0 means receiving wins
       winner = delta < 0 ? "receiving" : "giving";

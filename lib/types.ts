@@ -101,6 +101,27 @@ export interface AppSettings {
   swid: string;
 }
 
+export interface PowerMatchup {
+  opponentId: number;
+  opponentName: string;
+  opponentLogo?: string;
+  teamCatWins: number;
+  oppCatWins: number;
+  pushes: number;
+  result: "W" | "L" | "T";
+}
+
+export interface PowerRankEntry {
+  teamId: number;
+  teamName: string;
+  teamLogo?: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  winPct: number;
+  matchups: PowerMatchup[];
+}
+
 export type StatsWindow = "season" | "30" | "15" | "7";
 
 export interface EspnPlayerInfo {

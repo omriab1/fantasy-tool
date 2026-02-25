@@ -56,8 +56,10 @@ export function CategoryTable(props: Props) {
                 <td className={`py-2 px-3 text-right font-mono ${isWin ? "text-white font-bold" : "text-gray-400"}`}>
                   {fmt(r.receiving, r.category)}
                 </td>
-                <td className={`py-2 px-3 text-right font-mono font-semibold ${deltaColor}`}>
-                  {deltaSign}{fmt(r.delta, r.category)}
+                <td className={`py-2 px-3 text-right font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
+                  {r.winner !== "push" && fmt(r.giving, r.category) === fmt(r.receiving, r.category)
+                    ? (isWin ? "> +.001" : "< -.001")
+                    : `${deltaSign}${fmt(r.delta, r.category)}`}
                 </td>
                 <td className="py-2 px-3 text-right">
                   {isWin ? (
@@ -123,8 +125,10 @@ export function CategoryTable(props: Props) {
                 <td className={`py-2.5 px-3 text-left font-mono ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
                   {fmt(r.receiving, r.category)}
                 </td>
-                <td className={`py-2.5 px-3 text-right font-mono font-semibold ${deltaColor}`}>
-                  {deltaSign}{fmt(delta, r.category)}
+                <td className={`py-2.5 px-3 text-right font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
+                  {r.winner !== "push" && fmt(r.giving, r.category) === fmt(r.receiving, r.category)
+                    ? (teamAWins ? "> +.001" : "< -.001")
+                    : `${deltaSign}${fmt(delta, r.category)}`}
                 </td>
               </tr>
             );
