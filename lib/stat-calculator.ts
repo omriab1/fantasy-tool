@@ -2,7 +2,7 @@ import type { PlayerStats, AggregatedStats } from "./types";
 
 export function aggregateStats(players: PlayerStats[]): AggregatedStats {
   if (players.length === 0) {
-    return { PTS: 0, REB: 0, AST: 0, STL: 0, BLK: 0, TO: 0, "3PM": 0, "eFG%": 0, "FT%": 0 };
+    return { PTS: 0, REB: 0, AST: 0, STL: 0, BLK: 0, TO: 0, "3PM": 0, "AFG%": 0, "FT%": 0 };
   }
 
   // Counting stats: SUM of per-game averages across all players
@@ -10,7 +10,7 @@ export function aggregateStats(players: PlayerStats[]): AggregatedStats {
   let sumPTS = 0, sumREB = 0, sumAST = 0, sumSTL = 0, sumBLK = 0, sumTO = 0, sum3PM = 0;
 
   // Percentage stats: volume-weighted using raw totals
-  // eFG% = (Σ FGM + 0.5 × Σ 3PM) / Σ FGA
+  // AFG% = (Σ FGM + 0.5 × Σ 3PM) / Σ FGA
   // FT%  = Σ FTM / Σ FTA
   let totalFGM = 0, totalFGA = 0, total3PM = 0, totalFTM = 0, totalFTA = 0;
 
@@ -42,13 +42,13 @@ export function aggregateStats(players: PlayerStats[]): AggregatedStats {
     BLK: sumBLK,
     TO: sumTO,
     "3PM": sum3PM,
-    "eFG%": safe(totalFGM + 0.5 * total3PM, totalFGA),
+    "AFG%": safe(totalFGM + 0.5 * total3PM, totalFGA),
     "FT%": safe(totalFTM, totalFTA),
   };
 }
 
 export function fmt(val: number, cat: string): string {
-  if (cat === "eFG%" || cat === "FT%") {
+  if (cat === "AFG%" || cat === "FT%") {
     // Show as .xxx (e.g. .465) — val is 0–1 range
     const sign = val < 0 ? "-" : "";
     const abs = Math.abs(val).toFixed(3); // "0.465"

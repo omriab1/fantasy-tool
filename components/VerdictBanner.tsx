@@ -1,6 +1,8 @@
 interface TradeVerdictProps {
   type: "trade";
   wins: number;
+  losses: number;
+  equals: number;
   total: number;
 }
 
@@ -16,15 +18,14 @@ type Props = TradeVerdictProps | MatchupVerdictProps;
 
 export function VerdictBanner(props: Props) {
   if (props.type === "trade") {
-    const { wins, total } = props;
-    const losses = total - wins;
+    const { wins, losses, equals } = props;
     const color =
       wins > losses ? "text-green-400" : wins < losses ? "text-red-400" : "text-yellow-400";
     return (
       <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-5 text-center">
         <p className="text-gray-400 text-sm mb-1 uppercase tracking-widest">Trade verdict</p>
         <p className={`text-3xl font-bold font-mono ${color}`}>
-          You win {wins} / {total} cats
+          {wins}W — {losses}L{equals > 0 ? ` — ${equals}E` : ""}
         </p>
         <p className="text-gray-500 text-sm mt-1">
           {wins > losses

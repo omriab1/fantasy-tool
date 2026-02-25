@@ -5,7 +5,14 @@ export function calcTradeScore(giving: AggregatedStats, receiving: AggregatedSta
   const results: CategoryResult[] = CATEGORIES.map((cat) => {
     const g = giving[cat];
     const r = receiving[cat];
-    const delta = r - g;
+
+    // Round each side to display precision first, then compute delta.
+    // This ensures values that look equal (e.g. 2.44 vs 2.36 → both "2.4") are treated as equal.
+    const isPct = cat === "AFG%" || cat === "FT%";
+    const factor = isPct ? 10000 : 10;
+    const rg = Math.round(g * factor) / factor;
+    const rr = Math.round(r * factor) / factor;
+    const delta = Math.round((rr - rg) * factor) / factor;
 
     let winner: CategoryResult["winner"];
     const lowerIsBetter = LOWER_IS_BETTER.includes(cat as typeof LOWER_IS_BETTER[number]);
@@ -23,6 +30,8 @@ export function calcTradeScore(giving: AggregatedStats, receiving: AggregatedSta
   });
 
   const winsForReceiving = results.filter((r) => r.winner === "receiving").length;
+  const losses = results.filter((r) => r.winner === "giving").length;
+  const equals = results.filter((r) => r.winner === "push").length;
 
-  return { results, winsForReceiving, totalCats: CATEGORIES.length };
+  return { results, winsForReceiving, losses, equals, totalCats: CATEGORIES.length };
 }

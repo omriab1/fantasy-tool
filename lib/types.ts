@@ -15,7 +15,7 @@ export const STAT_IDS = {
   GP: 42,
 } as const;
 
-export const CATEGORIES = ["eFG%", "FT%", "3PM", "REB", "AST", "STL", "BLK", "TO", "PTS"] as const;
+export const CATEGORIES = ["AFG%", "FT%", "3PM", "REB", "AST", "STL", "BLK", "TO", "PTS"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 // Lower is better for TO
@@ -53,7 +53,7 @@ export interface AggregatedStats {
   BLK: number;
   TO: number;
   "3PM": number;
-  "eFG%": number;
+  "AFG%": number;
   "FT%": number;
 }
 
@@ -68,6 +68,8 @@ export interface CategoryResult {
 export interface TradeAnalysis {
   results: CategoryResult[];
   winsForReceiving: number;
+  losses: number;
+  equals: number;
   totalCats: number;
 }
 

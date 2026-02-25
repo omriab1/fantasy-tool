@@ -71,7 +71,7 @@ export function CategoryTable(props: Props) {
                     ) : r.winner === "giving" ? (
                       <span className="text-red-400 font-semibold">LOSS</span>
                     ) : (
-                      <span className="text-gray-500">PUSH</span>
+                      <span className="text-gray-500">EQUAL</span>
                     )}
                   </td>
                 </tr>
@@ -114,8 +114,8 @@ export function CategoryTable(props: Props) {
               ? "text-red-400"
               : "text-gray-500";
 
-            // Delta = giving - receiving (Team A - Team B)
-            const delta = r.giving - r.receiving;
+            // Delta = giving - receiving (Team A - Team B). r.delta is receiving-giving so negate it.
+            const delta = -r.delta;
             const deltaSign = delta > 0 ? "+" : "";
 
             return (

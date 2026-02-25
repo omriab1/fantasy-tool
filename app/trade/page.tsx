@@ -121,6 +121,8 @@ export default function TradePage() {
               <VerdictBanner
                 type="trade"
                 wins={analysis.winsForReceiving}
+                losses={analysis.losses}
+                equals={analysis.equals}
                 total={analysis.totalCats}
               />
               <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">

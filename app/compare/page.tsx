@@ -36,7 +36,7 @@ function accumToStats(acc: WeekAccum): AggregatedStats {
     BLK: acc.blk / w,
     TO:  acc.to  / w,
     "3PM": acc.threepm / w,
-    "eFG%": acc.fga > 0 ? (acc.fgm + 0.5 * acc.threepm) / acc.fga : 0,
+    "AFG%": acc.fga > 0 ? (acc.fgm + 0.5 * acc.threepm) / acc.fga : 0,
     "FT%":  acc.fta > 0 ? acc.ftm / acc.fta : 0,
   };
 }
