@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { saveSettings } from "@/lib/espn-client";
 import { clearCache } from "@/lib/espn-cache";
 
@@ -9,6 +10,7 @@ export default function SettingsPage() {
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [clickedBookmark, setClickedBookmark] = useState(false);
   const [autoResult, setAutoResult] = useState<{ s2: boolean; swid: boolean; leagueId: boolean } | null>(null);
   const bookmarkRef = useRef<HTMLAnchorElement>(null);
@@ -183,6 +185,41 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Transfer to Phone ──────────────────────────────── */}
+      {leagueId && espnS2 && swid && (
+        <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 mt-4">
+          <h2 className="text-base font-semibold text-white mb-1">Transfer to Phone</h2>
+          <p className="text-xs text-gray-500 mb-5">
+            Scan this QR code with your phone camera to open the app with your credentials pre-loaded.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="bg-white p-3 rounded-xl shrink-0">
+              <QRCodeSVG
+                value={`${typeof window !== "undefined" ? window.location.origin : ""}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}`}
+                size={160}
+              />
+            </div>
+            <div className="flex flex-col gap-3 w-full">
+              <p className="text-xs text-gray-400">Or copy the link and send it to your phone:</p>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}`;
+                  navigator.clipboard.writeText(url);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2500);
+                }}
+                className="bg-white/10 hover:bg-white/15 text-white text-sm font-medium py-2.5 px-4 rounded-lg transition-colors"
+              >
+                {copied ? "Copied ✓" : "Copy Setup Link"}
+              </button>
+              <p className="text-xs text-gray-600">
+                Opening the link on your phone will save credentials automatically.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Manual cookie guide (collapsible) ──────────────── */}
       <details className="mt-4 group">
