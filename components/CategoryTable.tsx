@@ -87,57 +87,100 @@ export function CategoryTable(props: Props) {
   const { teamAName, teamBName } = props as MatchupTableProps;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-gray-500 text-xs uppercase border-b border-white/10">
-            <th className="text-right py-2 px-3 font-medium">{teamAName}</th>
-            <th className="text-center py-2 px-3 font-medium">Category</th>
-            <th className="text-left py-2 px-3 font-medium">{teamBName}</th>
-            <th className="text-right py-2 px-3 font-medium">Delta (A−B)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {results.map((r) => {
-            // In matchup mode: giving = Team A, receiving = Team B
-            const teamAWins = r.winner === "giving";
-            const teamBWins = r.winner === "receiving";
-            const rowColor = teamAWins
-              ? "bg-green-500/10 border-l-2 border-l-green-500"
-              : teamBWins
-              ? "bg-red-500/10 border-l-2 border-l-red-500"
-              : "";
-            const lowerBetter = LOWER_IS_BETTER.includes(r.category as typeof LOWER_IS_BETTER[number]);
-            const deltaColor = teamAWins
-              ? "text-green-400"
-              : teamBWins
-              ? "text-red-400"
-              : "text-gray-500";
+    <>
+      {/* ── Mobile layout ── */}
+      <div className="sm:hidden divide-y divide-white/5">
+        {results.map((r) => {
+          const teamAWins = r.winner === "giving";
+          const teamBWins = r.winner === "receiving";
+          const lowerBetter = LOWER_IS_BETTER.includes(r.category as typeof LOWER_IS_BETTER[number]);
+          const delta = -r.delta;
+          const deltaSign = delta > 0 ? "+" : "";
+          const deltaColor = teamAWins ? "text-green-400" : teamBWins ? "text-red-400" : "text-gray-500";
+          const rowBg = teamAWins
+            ? "bg-green-500/10 border-l-2 border-l-green-500"
+            : teamBWins
+            ? "bg-red-500/10 border-l-2 border-l-red-500"
+            : "";
 
-            // Delta = giving - receiving (Team A - Team B). r.delta is receiving-giving so negate it.
-            const delta = -r.delta;
-            const deltaSign = delta > 0 ? "+" : "";
-
-            return (
-              <tr key={r.category} className={`border-b border-white/5 ${rowColor}`}>
-                <td className={`py-2.5 px-3 text-right font-mono ${teamAWins ? "text-white font-semibold" : "text-gray-400"}`}>
-                  {fmt(r.giving, r.category)}
-                </td>
-                <td className="py-2.5 px-3 text-center font-medium text-white">
+          return (
+            <div key={r.category} className={`px-4 py-3 ${rowBg}`}>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-white font-semibold text-sm">
                   {r.category}
                   {lowerBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
-                </td>
-                <td className={`py-2.5 px-3 text-left font-mono ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
-                  {fmt(r.receiving, r.category)}
-                </td>
-                <td className={`py-2.5 px-3 text-right font-mono font-semibold ${deltaColor}`}>
+                </span>
+                <span className={`text-xs font-mono font-semibold ${deltaColor}`}>
                   {deltaSign}{fmt(delta, r.category)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className={`text-sm truncate max-w-[60%] ${teamAWins ? "text-green-400 font-semibold" : "text-gray-500"}`}>
+                  {teamAName}
+                </span>
+                <span className={`font-mono text-sm ${teamAWins ? "text-white font-semibold" : "text-gray-400"}`}>
+                  {fmt(r.giving, r.category)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mt-0.5">
+                <span className={`text-sm truncate max-w-[60%] ${teamBWins ? "text-red-400 font-semibold" : "text-gray-500"}`}>
+                  {teamBName}
+                </span>
+                <span className={`font-mono text-sm ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
+                  {fmt(r.receiving, r.category)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Desktop layout ── */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-gray-500 text-xs uppercase border-b border-white/10">
+              <th className="text-right py-2 px-3 font-medium">{teamAName}</th>
+              <th className="text-center py-2 px-3 font-medium">Category</th>
+              <th className="text-left py-2 px-3 font-medium">{teamBName}</th>
+              <th className="text-right py-2 px-3 font-medium">Delta (A−B)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((r) => {
+              const teamAWins = r.winner === "giving";
+              const teamBWins = r.winner === "receiving";
+              const rowColor = teamAWins
+                ? "bg-green-500/10 border-l-2 border-l-green-500"
+                : teamBWins
+                ? "bg-red-500/10 border-l-2 border-l-red-500"
+                : "";
+              const lowerBetter = LOWER_IS_BETTER.includes(r.category as typeof LOWER_IS_BETTER[number]);
+              const deltaColor = teamAWins ? "text-green-400" : teamBWins ? "text-red-400" : "text-gray-500";
+              const delta = -r.delta;
+              const deltaSign = delta > 0 ? "+" : "";
+
+              return (
+                <tr key={r.category} className={`border-b border-white/5 ${rowColor}`}>
+                  <td className={`py-2.5 px-3 text-right font-mono ${teamAWins ? "text-white font-semibold" : "text-gray-400"}`}>
+                    {fmt(r.giving, r.category)}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-medium text-white">
+                    {r.category}
+                    {lowerBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
+                  </td>
+                  <td className={`py-2.5 px-3 text-left font-mono ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
+                    {fmt(r.receiving, r.category)}
+                  </td>
+                  <td className={`py-2.5 px-3 text-right font-mono font-semibold ${deltaColor}`}>
+                    {deltaSign}{fmt(delta, r.category)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

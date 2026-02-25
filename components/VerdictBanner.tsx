@@ -48,14 +48,18 @@ export function VerdictBanner(props: Props) {
 
   return (
     <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-5 text-center">
-      <p className="text-gray-400 text-sm mb-1 uppercase tracking-widest">Matchup score</p>
-      <p className={`text-3xl font-bold font-mono ${color}`}>
-        {teamAName}{" "}
-        <span className="text-white">
+      <p className="text-gray-400 text-sm mb-2 uppercase tracking-widest">Matchup score</p>
+      <div className="flex items-center justify-center gap-3 flex-wrap">
+        <span className={`text-xl font-bold truncate max-w-[35%] ${teamAWins > teamBWins ? "text-green-400" : "text-gray-300"}`}>
+          {teamAName}
+        </span>
+        <span className="text-3xl font-bold font-mono text-white whitespace-nowrap">
           {teamAWins} — {teamBWins}
-        </span>{" "}
-        {teamBName}
-      </p>
+        </span>
+        <span className={`text-xl font-bold truncate max-w-[35%] ${teamBWins > teamAWins ? "text-green-400" : "text-gray-300"}`}>
+          {teamBName}
+        </span>
+      </div>
     </div>
   );
 }
