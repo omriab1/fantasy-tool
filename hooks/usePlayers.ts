@@ -57,7 +57,11 @@ function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): 
   const posId = (info.defaultPositionId as number) ?? 9;
 
   // Build position string from eligibleSlots (ESPN order), filtering to real position slots only
-  const eligibleSlots = (info.eligibleSlots as number[]) ?? [];
+  // eligibleSlots may live on the player object or the outer entry
+  const eligibleSlots =
+    (info.eligibleSlots as number[] | undefined) ??
+    (entry.eligibleSlots as number[] | undefined) ??
+    [];
   const posList = [...new Set(eligibleSlots.filter((s) => s in SLOT_POS).map((s) => SLOT_POS[s]))];
   const position = posList.length > 0 ? posList.join(", ") : (POS_MAP[posId] ?? "UT");
 
@@ -91,7 +95,7 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
   const load = useCallback(() => {
     if (!leagueId || !espnS2 || !swid) return;
 
-    const key = cacheKey("players", leagueId, window);
+    const key = cacheKey("players_v2", leagueId, window);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);
@@ -123,7 +127,7 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
           const stats = parsePlayerEntry(p as Record<string, unknown>, window);
           if (stats) parsed.push(stats);
         }
-        cacheSet(key, parsed);
+        cacheSet(key, parsed); // key = players_v2
         setPlayers(parsed);
       })
       .catch((err: Error) => setError(err.message))
