@@ -131,9 +131,7 @@ export function ShareModal({
         position: "fixed",
         inset: 0,
         zIndex: 50,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        overflowY: "auto",
         padding: "16px",
         backgroundColor: "rgba(0,0,0,0.72)",
         backdropFilter: "blur(4px)",
@@ -147,10 +145,9 @@ export function ShareModal({
           border: "1px solid rgba(255,255,255,0.08)",
           width: "100%",
           maxWidth: 520,
-          overflow: "hidden",
+          margin: "0 auto",
           display: "flex",
           flexDirection: "column",
-          maxHeight: "90vh",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -162,7 +159,6 @@ export function ShareModal({
             justifyContent: "space-between",
             padding: "14px 20px",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
-            flexShrink: 0,
           }}
         >
           <span style={{ fontSize: 15, fontWeight: 600, color: "#ffffff" }}>
@@ -186,17 +182,12 @@ export function ShareModal({
           </button>
         </div>
 
-        {/* Card preview — also the capture target.
-            minHeight:0 is required for overflow-y scroll to work inside a flex column */}
+        {/* Card preview — capture target */}
         <div
           style={{
-            overflowY: "auto",
-            overflowX: "auto",
             padding: "20px",
             display: "flex",
             justifyContent: "center",
-            flexShrink: 1,
-            minHeight: 0,
           }}
         >
           <ShareCard ref={captureRef} {...cardProps} />
