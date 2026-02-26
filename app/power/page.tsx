@@ -81,7 +81,7 @@ function MatchupTooltip({
                     ? <span className="text-green-400 font-bold">W</span>
                     : oppWins
                     ? <span className="text-red-400 font-bold">L</span>
-                    : <span className="text-gray-700">–</span>}
+                    : <span className="text-gray-500">T</span>}
                 </td>
               </tr>
             );
