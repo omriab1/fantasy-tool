@@ -40,7 +40,20 @@ export function WeekRangePicker({ currentPeriod, startPeriod, endPeriod, onStart
               Last {n}w
             </button>
           ))}
+          <button
+            onClick={() => { onStartChange(1); onEndChange(Math.max(1, currentPeriod - 1)); }}
+            className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+              startPeriod === 1 && endPeriod === Math.max(1, currentPeriod - 1)
+                ? "bg-[#e8193c] border-[#e8193c] text-white"
+                : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+            }`}
+          >
+            Season
+          </button>
         </div>
+        <p className="text-xs text-gray-600 mt-2">
+          Quick select uses completed weeks only. To include the current week, set the end week manually below.
+        </p>
       </div>
 
       {/* Manual range */}
