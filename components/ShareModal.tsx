@@ -181,20 +181,8 @@ export function ShareModal({
           </button>
         </div>
 
-        {/* Hidden full-size card for PNG capture — off-screen but in DOM */}
-        <div
-          style={{
-            position: "fixed",
-            left: -10000,
-            top: 0,
-            pointerEvents: "none",
-            zIndex: -1,
-          }}
-        >
-          <ShareCard ref={captureRef} {...cardProps} />
-        </div>
-
-        {/* Scrollable card preview area */}
+        {/* Scrollable card preview — also the capture target.
+            Capturing the visible card guarantees images are already loaded. */}
         <div
           style={{
             overflowY: "auto",
@@ -205,10 +193,7 @@ export function ShareModal({
             flexShrink: 1,
           }}
         >
-          {/* zoom scales the layout box too — no height gap like transform:scale */}
-          <div style={{ zoom: 0.85, display: "inline-block" }}>
-            <ShareCard {...cardProps} />
-          </div>
+          <ShareCard ref={captureRef} {...cardProps} />
         </div>
 
         {/* Action buttons */}

@@ -319,7 +319,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           </div>
           <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 5 }}>
             {winsForReceiving}W &mdash; {losses}L
-            {equals > 0 ? ` \u2014 ${equals}T` : ""}
+            {equals > 0 ? ` \u2014 ${equals}E` : ""}
           </div>
         </div>
 
@@ -404,7 +404,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
               : isLoss
               ? "rgba(248,113,113,0.08)"
               : "transparent";
-            const resultChar = isWin ? "W" : isLoss ? "L" : "T";
+            const resultChar = isWin ? "W" : isLoss ? "L" : "E";
             const resultColor = isWin
               ? "#4ade80"
               : isLoss
