@@ -127,7 +127,7 @@ export default function TradePage() {
                 equals={analysis.equals}
                 total={analysis.totalCats}
               />
-              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
+              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
                 <CategoryTable mode="trade" results={analysis.results} />
               </div>
               <div className="flex justify-center">

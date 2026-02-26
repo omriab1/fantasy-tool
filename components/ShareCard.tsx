@@ -253,8 +253,8 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             }}
           >
             {[
-              { w: sc(90), align: "right" as const, label: "GIVE" },
               { w: sc(76), align: "center" as const, label: "CAT" },
+              { w: sc(90), align: "center" as const, label: "GIVE" },
               { w: sc(90), align: "center" as const, label: "RECV" },
               { w: undefined, align: "center" as const, label: "DIFF" },
               { w: sc(42), align: "center" as const, label: "RES" },
@@ -297,9 +297,6 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                   backgroundColor: bgColor,
                 }}
               >
-                <div style={{ width: sc(90), textAlign: "right", fontSize: sc(14), color: "#d1d5db" }}>
-                  {fmt(row.giving, row.category)}
-                </div>
                 <div
                   style={{
                     width: sc(76),
@@ -311,6 +308,9 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                   }}
                 >
                   {row.category}
+                </div>
+                <div style={{ width: sc(90), textAlign: "center", fontSize: sc(14), color: "#d1d5db" }}>
+                  {fmt(row.giving, row.category)}
                 </div>
                 <div style={{ width: sc(90), textAlign: "center", fontSize: sc(14), color: "#d1d5db" }}>
                   {fmt(row.receiving, row.category)}

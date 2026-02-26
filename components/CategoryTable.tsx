@@ -24,11 +24,11 @@ export function CategoryTable(props: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-gray-500 text-xs uppercase border-b border-white/10">
-            <th className="text-left py-2 px-3 font-medium">Cat</th>
-            <th className="text-right py-2 px-3 font-medium">Giving</th>
-            <th className="text-right py-2 px-3 font-medium">Receiving</th>
-            <th className="text-right py-2 px-3 font-medium">Δ</th>
-            <th className="text-right py-2 px-3 font-medium"></th>
+            <th className="text-center py-2 px-2 font-medium">Cat</th>
+            <th className="text-center py-2 px-2 font-medium">Giving</th>
+            <th className="text-center py-2 px-2 font-medium">Receiving</th>
+            <th className="text-center py-2 px-2 font-medium">Δ</th>
+            <th className="text-center py-2 px-2 font-medium"></th>
           </tr>
         </thead>
         <tbody>
@@ -46,22 +46,22 @@ export function CategoryTable(props: Props) {
 
             return (
               <tr key={r.category} className={`border-b border-white/5 ${rowColor}`}>
-                <td className="py-2 px-3 font-medium text-white">
+                <td className="py-2 px-2 text-center font-medium text-white">
                   {r.category}
                   {lowerBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
                 </td>
-                <td className={`py-2 px-3 text-right font-mono ${isLoss ? "text-white font-bold" : "text-gray-400"}`}>
+                <td className={`py-2 px-2 text-center font-mono ${isLoss ? "text-white font-bold" : "text-gray-400"}`}>
                   {fmt(r.giving, r.category)}
                 </td>
-                <td className={`py-2 px-3 text-right font-mono ${isWin ? "text-white font-bold" : "text-gray-400"}`}>
+                <td className={`py-2 px-2 text-center font-mono ${isWin ? "text-white font-bold" : "text-gray-400"}`}>
                   {fmt(r.receiving, r.category)}
                 </td>
-                <td className={`py-2 px-3 text-right font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
+                <td className={`py-2 px-2 text-center font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
                   {r.winner !== "push" && fmt(r.giving, r.category) === fmt(r.receiving, r.category)
                     ? (isWin ? "> +.001" : "< -.001")
                     : `${deltaSign}${fmt(r.delta, r.category)}`}
                 </td>
-                <td className="py-2 px-3 text-right">
+                <td className="py-2 px-2 text-center">
                   {isWin ? (
                     <span className="text-green-400 font-bold">W</span>
                   ) : isLoss ? (
@@ -86,10 +86,10 @@ export function CategoryTable(props: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-gray-500 text-xs uppercase border-b border-white/10">
-            <th className="text-right py-2 px-3 font-medium">{teamAName}</th>
-            <th className="text-center py-2 px-3 font-medium">Category</th>
-            <th className="text-left py-2 px-3 font-medium">{teamBName}</th>
-            <th className="text-right py-2 px-3 font-medium">Delta (A−B)</th>
+            <th className="text-center py-2 px-2 font-medium">{teamAName}</th>
+            <th className="text-center py-2 px-2 font-medium">Category</th>
+            <th className="text-center py-2 px-2 font-medium">{teamBName}</th>
+            <th className="text-center py-2 px-2 font-medium">Delta (A−B)</th>
           </tr>
         </thead>
         <tbody>
@@ -115,17 +115,17 @@ export function CategoryTable(props: Props) {
 
             return (
               <tr key={r.category} className={`border-b border-white/5 ${rowColor}`}>
-                <td className={`py-2.5 px-3 text-right font-mono ${teamAWins ? "text-white font-semibold" : "text-gray-400"}`}>
+                <td className={`py-2.5 px-2 text-center font-mono ${teamAWins ? "text-white font-semibold" : "text-gray-400"}`}>
                   {fmt(r.giving, r.category)}
                 </td>
-                <td className="py-2.5 px-3 text-center font-medium text-white">
+                <td className="py-2.5 px-2 text-center font-medium text-white">
                   {r.category}
                   {lowerBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
                 </td>
-                <td className={`py-2.5 px-3 text-left font-mono ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
+                <td className={`py-2.5 px-2 text-center font-mono ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
                   {fmt(r.receiving, r.category)}
                 </td>
-                <td className={`py-2.5 px-3 text-right font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
+                <td className={`py-2.5 px-2 text-center font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
                   {r.winner !== "push" && fmt(r.giving, r.category) === fmt(r.receiving, r.category)
                     ? (teamAWins ? "> +.001" : "< -.001")
                     : `${deltaSign}${fmt(delta, r.category)}`}

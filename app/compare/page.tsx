@@ -234,7 +234,7 @@ export default function ComparePage() {
                 teamALogo={teamALogo}
                 teamBLogo={teamBLogo}
               />
-              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
+              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
                 <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
               </div>
             </div>
