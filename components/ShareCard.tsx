@@ -346,19 +346,6 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           })}
         </div>
 
-        {/* Watermark footer */}
-        <div
-          style={{
-            padding: "10px 20px",
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            textAlign: "center",
-            fontSize: 10,
-            color: "#374151",
-            letterSpacing: "0.08em",
-          }}
-        >
-          fantasy-tool.app
-        </div>
       </div>
     );
   }

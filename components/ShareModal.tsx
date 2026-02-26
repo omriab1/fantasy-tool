@@ -89,9 +89,7 @@ export function ShareModal({
       });
       await navigator.share({
         files: [file],
-        title: "Fantasy Tool",
-        text: "Check this new trade idea! 🏀 Fantasy Tool",
-        url: "https://fantasy-tool.app",
+        text: "I used https://fantasy-tool-roan.vercel.app/ to analyze this trade",
       });
     } catch {
       // User cancelled share or browser error — no-op
