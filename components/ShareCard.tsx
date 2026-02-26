@@ -232,7 +232,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
         </div>
 
         {/* Category table */}
-        <div style={{ paddingTop: 10, paddingBottom: 8 }}>
+        <div style={{ paddingTop: 10, paddingBottom: 20 }}>
           {/* Table column headers */}
           <div
             style={{

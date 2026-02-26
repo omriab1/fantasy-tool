@@ -49,7 +49,13 @@ export function ShareModal({
 
   const getDataUrl = useCallback(async () => {
     const { toPng } = await import("html-to-image");
-    return toPng(captureRef.current!, { pixelRatio: 2, cacheBust: true });
+    const el = captureRef.current!;
+    return toPng(el, {
+      pixelRatio: 2,
+      cacheBust: true,
+      width: el.offsetWidth,
+      height: el.scrollHeight,
+    });
   }, []);
 
   const handleDownload = async () => {
