@@ -142,52 +142,48 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
               >
                 {leftPlayers[i] ? (
                   <>
-                    {/* Headshot + team badge */}
+                    {/* Headshot via background-image — renders reliably in html-to-image */}
                     <div style={{ position: "relative", flexShrink: 0 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={headshotSrc(leftPlayers[i].playerId)}
-                        alt=""
-                        width={28}
-                        height={28}
+                      <div
                         style={{
                           width: 28,
                           height: 28,
                           borderRadius: "50%",
-                          objectFit: "cover",
+                          backgroundImage: `url(${headshotSrc(leftPlayers[i].playerId)})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
                           backgroundColor: "rgba(255,255,255,0.08)",
                         }}
                       />
                       {leftPlayers[i].teamAbbrev !== "0" && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={teamLogoSrc(leftPlayers[i].teamAbbrev)}
-                          alt=""
-                          width={12}
-                          height={12}
+                        <div
                           style={{
                             position: "absolute",
                             bottom: -2,
                             right: -2,
-                            width: 12,
-                            height: 12,
+                            width: 13,
+                            height: 13,
                             borderRadius: "50%",
-                            objectFit: "cover",
+                            backgroundImage: `url(${teamLogoSrc(leftPlayers[i].teamAbbrev)})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
                             backgroundColor: "#0f1117",
-                            outline: "1.5px solid #0f1117",
+                            boxShadow: "0 0 0 1.5px #0f1117",
                           }}
                         />
                       )}
                     </div>
-                    {/* Name */}
+                    {/* Name — clipped so it never overlaps the position label */}
                     <span
                       style={{
                         flex: 1,
-                        fontSize: 12,
+                        fontSize: 11,
                         color: "#e5e7eb",
                         fontWeight: 500,
                         minWidth: 0,
-                        lineHeight: 1.3,
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
                       }}
                     >
                       {leftPlayers[i].playerName}
@@ -198,6 +194,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                         fontSize: 10,
                         color: "#6b7280",
                         flexShrink: 0,
+                        marginLeft: 4,
                       }}
                     >
                       {leftPlayers[i].position}
@@ -221,49 +218,45 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 {rightPlayers[i] ? (
                   <>
                     <div style={{ position: "relative", flexShrink: 0 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={headshotSrc(rightPlayers[i].playerId)}
-                        alt=""
-                        width={28}
-                        height={28}
+                      <div
                         style={{
                           width: 28,
                           height: 28,
                           borderRadius: "50%",
-                          objectFit: "cover",
+                          backgroundImage: `url(${headshotSrc(rightPlayers[i].playerId)})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
                           backgroundColor: "rgba(255,255,255,0.08)",
                         }}
                       />
                       {rightPlayers[i].teamAbbrev !== "0" && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={teamLogoSrc(rightPlayers[i].teamAbbrev)}
-                          alt=""
-                          width={12}
-                          height={12}
+                        <div
                           style={{
                             position: "absolute",
                             bottom: -2,
                             right: -2,
-                            width: 12,
-                            height: 12,
+                            width: 13,
+                            height: 13,
                             borderRadius: "50%",
-                            objectFit: "cover",
+                            backgroundImage: `url(${teamLogoSrc(rightPlayers[i].teamAbbrev)})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
                             backgroundColor: "#0f1117",
-                            outline: "1.5px solid #0f1117",
+                            boxShadow: "0 0 0 1.5px #0f1117",
                           }}
                         />
-                      )}
+                      )}{/* placeholder to close the right cell block */}
                     </div>
                     <span
                       style={{
                         flex: 1,
-                        fontSize: 12,
+                        fontSize: 11,
                         color: "#e5e7eb",
                         fontWeight: 500,
                         minWidth: 0,
-                        lineHeight: 1.3,
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
                       }}
                     >
                       {rightPlayers[i].playerName}
@@ -273,6 +266,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                         fontSize: 10,
                         color: "#6b7280",
                         flexShrink: 0,
+                        marginLeft: 4,
                       }}
                     >
                       {rightPlayers[i].position}
