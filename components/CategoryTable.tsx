@@ -67,7 +67,7 @@ export function CategoryTable(props: Props) {
                   ) : isLoss ? (
                     <span className="text-red-400 font-bold">L</span>
                   ) : (
-                    <span className="text-gray-500">E</span>
+                    <span className="text-gray-500">T</span>
                   )}
                 </td>
               </tr>

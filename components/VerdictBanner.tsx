@@ -27,7 +27,7 @@ export function VerdictBanner(props: Props) {
       <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-5 text-center">
         <p className="text-gray-400 text-sm mb-1 uppercase tracking-widest">Trade verdict</p>
         <p className={`text-3xl font-bold font-mono ${color}`}>
-          {wins}W — {losses}L{equals > 0 ? ` — ${equals}E` : ""}
+          {wins}W — {losses}L{equals > 0 ? ` — ${equals}T` : ""}
         </p>
         <p className="text-gray-500 text-sm mt-1">
           {wins > losses

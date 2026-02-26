@@ -11,10 +11,12 @@ export interface ShareCardProps {
   receivingPlayers: PlayerStats[];
   analysis: TradeAnalysis;
   flipped: boolean;
+  // Pre-fetched base64 data URLs keyed by playerId (headshots) or "team_ABBREV" (logos)
+  imageDataUrls?: Record<string, string>;
 }
 
 export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
-  ({ givingPlayers, receivingPlayers, analysis, flipped }, ref) => {
+  ({ givingPlayers, receivingPlayers, analysis, flipped, imageDataUrls }, ref) => {
     // When flipped, swap sides so the card reflects the other trader's perspective
     const leftPlayers = flipped ? receivingPlayers : givingPlayers;
     const rightPlayers = flipped ? givingPlayers : receivingPlayers;
@@ -55,11 +57,11 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
       textTransform: "uppercase",
     };
 
-    // Helper: URL for ESPN images via same-origin proxy (avoids CORS in html-to-image)
-    const headshotUrl = (id: number) =>
-      `/api/espn/img?path=i/headshots/nba/players/full/${id}.png`;
-    const teamLogoUrl = (abbrev: string) =>
-      `/api/espn/img?path=i/teamlogos/nba/500/${abbrev}.png`;
+    // Resolve image src: use pre-fetched data URL if available, else proxy URL
+    const headshotSrc = (id: number) =>
+      imageDataUrls?.[String(id)] ?? `/api/espn/img?path=i/headshots/nba/players/full/${id}.png`;
+    const teamLogoSrc = (abbrev: string) =>
+      imageDataUrls?.[`team_${abbrev}`] ?? `/api/espn/img?path=i/teamlogos/nba/500/${abbrev}.png`;
 
     return (
       <div
@@ -144,7 +146,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={headshotUrl(leftPlayers[i].playerId)}
+                        src={headshotSrc(leftPlayers[i].playerId)}
                         alt=""
                         width={28}
                         height={28}
@@ -159,7 +161,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                       {leftPlayers[i].teamAbbrev !== "0" && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={teamLogoUrl(leftPlayers[i].teamAbbrev)}
+                          src={teamLogoSrc(leftPlayers[i].teamAbbrev)}
                           alt=""
                           width={12}
                           height={12}
@@ -184,10 +186,8 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                         fontSize: 12,
                         color: "#e5e7eb",
                         fontWeight: 500,
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
                         minWidth: 0,
+                        lineHeight: 1.3,
                       }}
                     >
                       {leftPlayers[i].playerName}
@@ -223,7 +223,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={headshotUrl(rightPlayers[i].playerId)}
+                        src={headshotSrc(rightPlayers[i].playerId)}
                         alt=""
                         width={28}
                         height={28}
@@ -238,7 +238,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                       {rightPlayers[i].teamAbbrev !== "0" && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={teamLogoUrl(rightPlayers[i].teamAbbrev)}
+                          src={teamLogoSrc(rightPlayers[i].teamAbbrev)}
                           alt=""
                           width={12}
                           height={12}
@@ -262,10 +262,8 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                         fontSize: 12,
                         color: "#e5e7eb",
                         fontWeight: 500,
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
                         minWidth: 0,
+                        lineHeight: 1.3,
                       }}
                     >
                       {rightPlayers[i].playerName}
@@ -319,7 +317,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           </div>
           <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 5 }}>
             {winsForReceiving}W &mdash; {losses}L
-            {equals > 0 ? ` \u2014 ${equals}E` : ""}
+            {equals > 0 ? ` \u2014 ${equals}T` : ""}
           </div>
         </div>
 
@@ -404,7 +402,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
               : isLoss
               ? "rgba(248,113,113,0.08)"
               : "transparent";
-            const resultChar = isWin ? "W" : isLoss ? "L" : "E";
+            const resultChar = isWin ? "W" : isLoss ? "L" : "T";
             const resultColor = isWin
               ? "#4ade80"
               : isLoss
