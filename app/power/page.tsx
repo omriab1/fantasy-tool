@@ -11,16 +11,16 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import Link from "next/link";
 
 function MatchupTooltip({
-  teamName, opponentName, teamStats, oppStats, anchorRight, anchorBottom,
+  teamName, opponentName, teamStats, oppStats, anchorLeft, anchorBottom,
 }: {
   teamName: string; opponentName: string;
   teamStats: AggregatedStats; oppStats: AggregatedStats;
-  anchorRight: number; anchorBottom: number;
+  anchorLeft: number; anchorBottom: number;
 }) {
   const catResults = calcTradeScore(teamStats, oppStats).results;
   return (
     <div
-      style={{ position: "fixed", right: anchorRight, bottom: anchorBottom, zIndex: 100 }}
+      style={{ position: "fixed", left: anchorLeft, bottom: anchorBottom, zIndex: 100 }}
       className="bg-[#0f1117] border border-white/20 rounded-lg shadow-2xl overflow-hidden pointer-events-none"
     >
       <table className="text-xs border-separate border-spacing-0">
@@ -131,7 +131,7 @@ export default function PowerPage() {
   const [hoveredMatchup, setHoveredMatchup] = useState<{
     teamId: number; opponentId: number;
     teamName: string; opponentName: string;
-    anchorRight: number; anchorBottom: number;
+    anchorLeft: number; anchorBottom: number;
   } | null>(null);
 
   const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
@@ -404,7 +404,7 @@ export default function PowerPage() {
           opponentName={hoveredMatchup.opponentName}
           teamStats={teamStatsMap[hoveredMatchup.teamId]}
           oppStats={teamStatsMap[hoveredMatchup.opponentId]}
-          anchorRight={hoveredMatchup.anchorRight}
+          anchorLeft={hoveredMatchup.anchorLeft}
           anchorBottom={hoveredMatchup.anchorBottom}
         />
       )}
@@ -438,12 +438,12 @@ export default function PowerPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-gray-500 text-xs uppercase tracking-wider">
-                    <th className="px-4 py-3 text-left w-8">#</th>
-                    <th className="px-4 py-3 text-left">Team</th>
-                    <th className="px-4 py-3 text-center w-12">W</th>
-                    <th className="px-4 py-3 text-center w-12">L</th>
-                    <th className="px-4 py-3 text-center w-12">T</th>
-                    <th className="px-4 py-3 text-center w-16">Win%</th>
+                    <th className="px-2 py-2.5 text-left">#</th>
+                    <th className="px-2 py-2.5 text-left">Team</th>
+                    <th className="px-2 py-2.5 text-center">W</th>
+                    <th className="px-2 py-2.5 text-center">L</th>
+                    <th className="px-2 py-2.5 text-center">T</th>
+                    <th className="px-2 py-2.5 text-center">W%</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -463,9 +463,9 @@ export default function PowerPage() {
                             setExpandedType(null);
                           }}
                         >
-                          <td className="px-4 py-3 text-gray-500 font-mono">{entry.rank}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 py-2.5 text-gray-500 font-mono">{entry.rank}</td>
+                          <td className="px-2 py-2.5">
+                            <div className="flex items-center gap-1.5">
                               <div className="w-6 h-6 shrink-0">
                                 {entry.teamLogo && (
                                   // eslint-disable-next-line @next/next/no-img-element
@@ -477,10 +477,10 @@ export default function PowerPage() {
                                   />
                                 )}
                               </div>
-                              <span className="text-white font-medium">{entry.teamName}</span>
+                              <span className="text-white font-medium text-sm leading-tight">{entry.teamName}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "W"); }}
                               className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
@@ -492,7 +492,7 @@ export default function PowerPage() {
                               {entry.wins}
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "L"); }}
                               className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
@@ -504,7 +504,7 @@ export default function PowerPage() {
                               {entry.losses}
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "T"); }}
                               className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
@@ -516,7 +516,7 @@ export default function PowerPage() {
                               {entry.ties}
                             </button>
                           </td>
-                          <td className="px-4 py-3 text-center text-gray-300 tabular-nums">
+                          <td className="px-2 py-2.5 text-center text-gray-300 tabular-nums">
                             {entry.winPct.toFixed(1)}%
                           </td>
                         </tr>
@@ -546,17 +546,22 @@ export default function PowerPage() {
                                           />
                                         )}
                                       </div>
-                                      <span className="text-gray-300 min-w-0 truncate">{m.opponentName}</span>
+                                      <span className="text-gray-300 min-w-0 flex-1">{m.opponentName}</span>
                                       <span
-                                        className="ml-auto text-gray-500 tabular-nums shrink-0 cursor-default"
+                                        className="ml-3 text-gray-500 tabular-nums shrink-0 cursor-default"
                                         onMouseEnter={(e) => {
                                           const rect = e.currentTarget.getBoundingClientRect();
+                                          const tooltipWidth = 248;
+                                          const left = Math.min(
+                                            Math.max(8, rect.left + rect.width / 2 - tooltipWidth / 2),
+                                            window.innerWidth - tooltipWidth - 8,
+                                          );
                                           setHoveredMatchup({
                                             teamId: entry.teamId,
                                             opponentId: m.opponentId,
                                             teamName: entry.teamName,
                                             opponentName: m.opponentName,
-                                            anchorRight: window.innerWidth - rect.right,
+                                            anchorLeft: left,
                                             anchorBottom: window.innerHeight - rect.top + 6,
                                           });
                                         }}
