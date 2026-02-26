@@ -54,7 +54,7 @@ export function PlayerSearch({ players, onAdd, placeholder = "Search players…"
         }}
         onFocus={() => setOpen(true)}
         placeholder={placeholder}
-        className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
+        className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-base text-white placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
       />
       {open && results.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full bg-[#1a1f2e] border border-white/10 rounded-lg shadow-xl overflow-hidden max-h-64 overflow-y-auto">
