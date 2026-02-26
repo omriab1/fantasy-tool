@@ -29,23 +29,23 @@ const OPTIONS = [
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-16">
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4">
       {/* Logo + tagline */}
-      <div className="text-center mb-12">
-        <div className="text-5xl mb-4">🏀</div>
-        <h1 className="text-3xl font-bold text-white tracking-wide">Fantasy Tool</h1>
-        <p className="text-gray-400 mt-2 text-sm max-w-xs mx-auto">
+      <div className="text-center mb-7">
+        <div className="text-4xl mb-3">🏀</div>
+        <h1 className="text-2xl font-bold text-white tracking-wide">Fantasy Tool</h1>
+        <p className="text-gray-400 mt-1.5 text-xs max-w-xs mx-auto leading-relaxed">
           Your ESPN fantasy basketball toolkit — analyze trades, compare teams, and rank your league.
         </p>
       </div>
 
       {/* Option cards */}
-      <div className="w-full max-w-sm flex flex-col gap-3">
+      <div className="w-full max-w-sm flex flex-col gap-2.5">
         {OPTIONS.map((opt) => (
           <Link
             key={opt.href}
             href={opt.href}
-            className="flex items-center gap-4 bg-[#1a1f2e] border border-white/10 rounded-xl px-5 py-4 hover:border-white/25 hover:bg-[#1f2540] transition-colors group"
+            className="flex items-center gap-4 bg-[#1a1f2e] border border-white/10 rounded-xl px-4 py-3 hover:border-white/25 hover:bg-[#1f2540] transition-colors group"
           >
             <span className="text-2xl shrink-0">{opt.emoji}</span>
             <div className="flex-1 min-w-0">
