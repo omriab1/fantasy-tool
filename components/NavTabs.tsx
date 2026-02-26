@@ -19,7 +19,7 @@ export function NavTabs() {
         <span className="text-white font-bold text-sm tracking-widest uppercase mr-2 sm:mr-8 shrink-0">
           🏀 Fantasy Tool
         </span>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto">
           {TABS.map((tab) => {
             const active = pathname.startsWith(tab.href);
             return (
