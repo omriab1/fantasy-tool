@@ -29,7 +29,7 @@ const OPTIONS = [
 
 export default function HomePage() {
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center px-4">
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-10 sm:justify-center sm:pt-0 px-4">
       {/* Logo + tagline */}
       <div className="text-center mb-7">
         <div className="text-4xl mb-3">🏀</div>
