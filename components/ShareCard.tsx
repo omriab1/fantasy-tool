@@ -11,15 +11,21 @@ export interface ShareCardProps {
   receivingPlayers: PlayerStats[];
   analysis: TradeAnalysis;
   flipped: boolean;
+  /** Card width in px — all internal sizes scale proportionally. Default 480. */
+  cardWidth?: number;
 }
 
+// Base design is 480px wide. All sizes below are at base=480.
+const BASE = 480;
+
 export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
-  ({ givingPlayers, receivingPlayers, analysis, flipped }, ref) => {
-    // When flipped, swap sides so the card reflects the other trader's perspective
+  ({ givingPlayers, receivingPlayers, analysis, flipped, cardWidth = BASE }, ref) => {
+    const s = cardWidth / BASE;
+    const sc = (n: number) => Math.round(n * s); // scaled px value
+
     const leftPlayers = flipped ? receivingPlayers : givingPlayers;
     const rightPlayers = flipped ? givingPlayers : receivingPlayers;
 
-    // Recalculate with swapped args when flipped
     const displayAnalysis: TradeAnalysis = flipped
       ? calcTradeScore(aggregateStats(receivingPlayers), aggregateStats(givingPlayers))
       : analysis;
@@ -47,22 +53,21 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
     const maxRows = Math.max(leftPlayers.length, rightPlayers.length, 1);
 
     const colHeaderStyle: React.CSSProperties = {
-      padding: "10px 12px 6px",
-      fontSize: 10,
+      padding: `${sc(12)}px ${sc(14)}px ${sc(7)}px`,
+      fontSize: sc(12),
       fontWeight: 700,
       letterSpacing: "0.12em",
       color: "#6b7280",
       textTransform: "uppercase",
     };
 
-
     return (
       <div
         ref={ref}
         style={{
-          width: 420,
+          width: cardWidth,
           backgroundColor: "#0f1117",
-          borderRadius: 12,
+          borderRadius: sc(14),
           overflow: "hidden",
           fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
           color: "#ffffff",
@@ -72,18 +77,18 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
         <div
           style={{
             backgroundColor: "#13161f",
-            padding: "14px 20px",
+            padding: `${sc(16)}px ${sc(22)}px`,
             borderBottom: "1px solid rgba(255,255,255,0.1)",
             display: "flex",
             alignItems: "center",
-            gap: 10,
+            gap: sc(12),
           }}
         >
-          <span style={{ fontSize: 22 }}>🏀</span>
+          <span style={{ fontSize: sc(26) }}>🏀</span>
           <div>
             <div
               style={{
-                fontSize: 15,
+                fontSize: sc(17),
                 fontWeight: 700,
                 color: "#ffffff",
                 letterSpacing: "-0.01em",
@@ -91,7 +96,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             >
               Fantasy Tool
             </div>
-            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>
+            <div style={{ fontSize: sc(12), color: "#6b7280", marginTop: sc(1) }}>
               Trade Analyzer
             </div>
           </div>
@@ -99,7 +104,6 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
 
         {/* Player columns */}
         <div style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          {/* Column headers */}
           <div style={{ display: "flex" }}>
             <div style={{ ...colHeaderStyle, flex: 1 }}>YOU GIVE</div>
             <div
@@ -113,7 +117,6 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             </div>
           </div>
 
-          {/* Player rows — name + position */}
           {Array.from({ length: maxRows }).map((_, i) => (
             <div
               key={i}
@@ -122,14 +125,13 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 borderTop: "1px solid rgba(255,255,255,0.04)",
               }}
             >
-              {/* Left player cell */}
               <div
                 style={{
                   flex: 1,
                   display: "flex",
                   alignItems: "flex-start",
-                  gap: 6,
-                  padding: "6px 14px",
+                  gap: sc(7),
+                  padding: `${sc(8)}px ${sc(16)}px`,
                   minWidth: 0,
                 }}
               >
@@ -138,7 +140,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     <span
                       style={{
                         flex: 1,
-                        fontSize: 11,
+                        fontSize: sc(13),
                         color: "#e5e7eb",
                         fontWeight: 500,
                         minWidth: 0,
@@ -148,21 +150,27 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     >
                       {leftPlayers[i].playerName}
                     </span>
-                    <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0, paddingTop: 1 }}>
+                    <span
+                      style={{
+                        fontSize: sc(12),
+                        color: "#6b7280",
+                        flexShrink: 0,
+                        paddingTop: sc(1),
+                      }}
+                    >
                       {leftPlayers[i].position}
                     </span>
                   </>
                 )}
               </div>
 
-              {/* Right player cell */}
               <div
                 style={{
                   flex: 1,
                   display: "flex",
                   alignItems: "flex-start",
-                  gap: 6,
-                  padding: "6px 14px",
+                  gap: sc(7),
+                  padding: `${sc(8)}px ${sc(16)}px`,
                   minWidth: 0,
                   borderLeft: "1px solid rgba(255,255,255,0.08)",
                 }}
@@ -172,7 +180,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     <span
                       style={{
                         flex: 1,
-                        fontSize: 11,
+                        fontSize: sc(13),
                         color: "#e5e7eb",
                         fontWeight: 500,
                         minWidth: 0,
@@ -182,7 +190,14 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     >
                       {rightPlayers[i].playerName}
                     </span>
-                    <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0, paddingTop: 1 }}>
+                    <span
+                      style={{
+                        fontSize: sc(12),
+                        color: "#6b7280",
+                        flexShrink: 0,
+                        paddingTop: sc(1),
+                      }}
+                    >
                       {rightPlayers[i].position}
                     </span>
                   </>
@@ -191,13 +206,12 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             </div>
           ))}
 
-          {/* Bottom padding */}
           <div style={{ display: "flex" }}>
-            <div style={{ flex: 1, padding: "4px 12px" }} />
+            <div style={{ flex: 1, padding: `${sc(5)}px ${sc(14)}px` }} />
             <div
               style={{
                 flex: 1,
-                padding: "4px 12px",
+                padding: `${sc(5)}px ${sc(14)}px`,
                 borderLeft: "1px solid rgba(255,255,255,0.08)",
               }}
             />
@@ -207,7 +221,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
         {/* Verdict */}
         <div
           style={{
-            padding: "16px 20px",
+            padding: `${sc(20)}px ${sc(24)}px`,
             textAlign: "center",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
             backgroundColor: "rgba(255,255,255,0.02)",
@@ -215,7 +229,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
         >
           <div
             style={{
-              fontSize: 18,
+              fontSize: sc(21),
               fontWeight: 800,
               color: verdictColor,
               letterSpacing: "0.02em",
@@ -223,85 +237,44 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           >
             {verdictEmoji} {verdictText}
           </div>
-          <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 5 }}>
+          <div style={{ fontSize: sc(15), color: "#9ca3af", marginTop: sc(6) }}>
             {winsForReceiving}W &mdash; {losses}L
             {equals > 0 ? ` \u2014 ${equals}T` : ""}
           </div>
         </div>
 
         {/* Category table */}
-        <div style={{ paddingTop: 10, paddingBottom: 20 }}>
-          {/* Table column headers */}
+        <div style={{ paddingTop: sc(12), paddingBottom: sc(24) }}>
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              padding: "3px 16px 5px",
+              padding: `${sc(4)}px ${sc(18)}px ${sc(6)}px`,
             }}
           >
-            <div
-              style={{
-                width: 76,
-                textAlign: "right",
-                fontSize: 9,
-                color: "#4b5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              GIVE
-            </div>
-            <div
-              style={{
-                width: 64,
-                textAlign: "center",
-                fontSize: 9,
-                color: "#4b5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              CAT
-            </div>
-            <div
-              style={{
-                width: 76,
-                textAlign: "center",
-                fontSize: 9,
-                color: "#4b5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              RECV
-            </div>
-            <div
-              style={{
-                flex: 1,
-                textAlign: "center",
-                fontSize: 9,
-                color: "#4b5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              DIFF
-            </div>
-            <div
-              style={{
-                width: 36,
-                textAlign: "center",
-                fontSize: 9,
-                color: "#4b5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              RES
-            </div>
+            {[
+              { w: sc(90), align: "right" as const, label: "GIVE" },
+              { w: sc(76), align: "center" as const, label: "CAT" },
+              { w: sc(90), align: "center" as const, label: "RECV" },
+              { w: undefined, align: "center" as const, label: "DIFF" },
+              { w: sc(42), align: "center" as const, label: "RES" },
+            ].map(({ w, align, label }) => (
+              <div
+                key={label}
+                style={{
+                  ...(w ? { width: w } : { flex: 1 }),
+                  textAlign: align,
+                  fontSize: sc(10),
+                  color: "#4b5563",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {label}
+              </div>
+            ))}
           </div>
 
-          {/* Category rows */}
           {displayAnalysis.results.map((row) => {
             const isWin = row.winner === "receiving";
             const isLoss = row.winner === "giving";
@@ -311,14 +284,8 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
               ? "rgba(248,113,113,0.08)"
               : "transparent";
             const resultChar = isWin ? "W" : isLoss ? "L" : "T";
-            const resultColor = isWin
-              ? "#4ade80"
-              : isLoss
-              ? "#f87171"
-              : "#9ca3af";
-
-            const deltaStr =
-              (row.delta > 0 ? "+" : "") + fmt(row.delta, row.category);
+            const resultColor = isWin ? "#4ade80" : isLoss ? "#f87171" : "#9ca3af";
+            const deltaStr = (row.delta > 0 ? "+" : "") + fmt(row.delta, row.category);
 
             return (
               <div
@@ -326,25 +293,18 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  padding: "5px 16px",
+                  padding: `${sc(6)}px ${sc(18)}px`,
                   backgroundColor: bgColor,
                 }}
               >
-                <div
-                  style={{
-                    width: 76,
-                    textAlign: "right",
-                    fontSize: 12,
-                    color: "#d1d5db",
-                  }}
-                >
+                <div style={{ width: sc(90), textAlign: "right", fontSize: sc(14), color: "#d1d5db" }}>
                   {fmt(row.giving, row.category)}
                 </div>
                 <div
                   style={{
-                    width: 64,
+                    width: sc(76),
                     textAlign: "center",
-                    fontSize: 11,
+                    fontSize: sc(13),
                     color: "#9ca3af",
                     fontWeight: 600,
                     letterSpacing: "0.03em",
@@ -352,31 +312,17 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 >
                   {row.category}
                 </div>
-                <div
-                  style={{
-                    width: 76,
-                    textAlign: "center",
-                    fontSize: 12,
-                    color: "#d1d5db",
-                  }}
-                >
+                <div style={{ width: sc(90), textAlign: "center", fontSize: sc(14), color: "#d1d5db" }}>
                   {fmt(row.receiving, row.category)}
                 </div>
-                <div
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    fontSize: 11,
-                    color: "#6b7280",
-                  }}
-                >
+                <div style={{ flex: 1, textAlign: "center", fontSize: sc(13), color: "#6b7280" }}>
                   {deltaStr}
                 </div>
                 <div
                   style={{
-                    width: 36,
+                    width: sc(42),
                     textAlign: "center",
-                    fontSize: 11,
+                    fontSize: sc(13),
                     fontWeight: 700,
                     color: resultColor,
                   }}
@@ -387,7 +333,6 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             );
           })}
         </div>
-
       </div>
     );
   }

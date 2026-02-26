@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { ShareCard } from "./ShareCard";
 import type { PlayerStats, TradeAnalysis } from "@/lib/types";
 
@@ -12,6 +12,14 @@ interface ShareModalProps {
   analysis: TradeAnalysis;
 }
 
+// Preview card base width. Modal is 520px max; with 20px padding each side
+// the card fills exactly 480px on desktop — no zoom, no wasted space.
+const PREVIEW_CARD_W = 480;
+// Export card is larger for a high-res PNG.
+const EXPORT_CARD_W = 700;
+// Modal chrome height subtracted when computing available preview height.
+const CHROME_H = 200;
+
 export function ShareModal({
   open,
   onClose,
@@ -22,23 +30,26 @@ export function ShareModal({
   const [flipped, setFlipped] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "copying" | "sharing">("idle");
   const [canNativeShare, setCanNativeShare] = useState(false);
+
+  // Horizontal zoom so card fills available width on narrow viewports (mobile).
+  // On desktop (≥520px modal) this is always 1 — card shown at full 480px.
   const [previewScale, setPreviewScale] = useState(1);
+  // Whether to allow vertical scrolling inside the preview area
+  // (used when the trade is large and the card doesn't fit even after scaling).
+  const [allowScroll, setAllowScroll] = useState(false);
 
-  // Hidden full-size card — used only for PNG export
+  // Visible card — measured for scale computation.
+  const visibleCardRef = useRef<HTMLDivElement>(null);
+  // Hidden full-size card — used only for PNG export.
   const captureRef = useRef<HTMLDivElement>(null);
-  // Preview area container — used to measure available space
-  const previewAreaRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens
   useEffect(() => {
     if (open) {
       setFlipped(false);
       setStatus("idle");
-      setPreviewScale(1);
     }
   }, [open]);
 
-  // Detect Web Share API with file support (runs client-side only)
   useEffect(() => {
     try {
       const testFile = new File([], "x.png", { type: "image/png" });
@@ -52,34 +63,43 @@ export function ShareModal({
     }
   }, []);
 
-  // Compute zoom scale so the card always fits the preview area without scrolling
+  // Compute scale synchronously before paint — no flicker.
+  // Scale is width-only: the card always fills the available horizontal space.
+  // Vertical overflow triggers scroll rather than further shrinking.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const card = visibleCardRef.current;
+    if (!card) return;
+
+    const cardH = card.scrollHeight;
+    if (cardH <= 0) return;
+
+    // Available width inside the modal preview (modal 520px - 40px padding)
+    const availW = Math.min(window.innerWidth - 32, 520) - 40;
+    const scale = Math.min(1, availW / PREVIEW_CARD_W);
+    setPreviewScale(scale);
+
+    // Allow scroll if the card (at this scale) is taller than available height
+    const availH = window.innerHeight - CHROME_H;
+    setAllowScroll(cardH * scale > availH);
+  }, [open, flipped, givingPlayers, receivingPlayers]);
+
   useEffect(() => {
     if (!open) return;
-
-    const compute = () => {
-      const area = previewAreaRef.current;
-      const card = captureRef.current;
-      if (!area || !card) return;
-
-      const availH = area.clientHeight - 40; // 20px top + 20px bottom padding
-      const availW = area.clientWidth - 40;
+    const onResize = () => {
+      const card = visibleCardRef.current;
+      if (!card) return;
       const cardH = card.scrollHeight;
-      const cardW = 420;
-
-      const s = Math.min(1, availH / cardH, availW / cardW);
-      setPreviewScale(Math.max(0.3, s)); // never go below 30%
+      if (cardH <= 0) return;
+      const availW = Math.min(window.innerWidth - 32, 520) - 40;
+      const scale = Math.min(1, availW / PREVIEW_CARD_W);
+      setPreviewScale(scale);
+      const availH = window.innerHeight - CHROME_H;
+      setAllowScroll(cardH * scale > availH);
     };
-
-    // Wait one frame for layout to settle, then compute
-    const raf = requestAnimationFrame(compute);
-
-    // Also recompute on window resize (e.g. phone rotation)
-    window.addEventListener("resize", compute);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", compute);
-    };
-  }, [open, flipped, givingPlayers, receivingPlayers]);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open]);
 
   const getDataUrl = useCallback(async () => {
     const { toPng } = await import("html-to-image");
@@ -123,15 +143,13 @@ export function ShareModal({
     try {
       const dataUrl = await getDataUrl();
       const blob = await fetch(dataUrl).then((r) => r.blob());
-      const file = new File([blob], "trade-analysis.png", {
-        type: "image/png",
-      });
+      const file = new File([blob], "trade-analysis.png", { type: "image/png" });
       await navigator.share({
         files: [file],
         text: "I used https://fantasy-tool-roan.vercel.app/ to analyze this trade",
       });
     } catch {
-      // User cancelled share or browser error — no-op
+      // User cancelled or browser error — no-op
     } finally {
       setStatus("idle");
     }
@@ -152,27 +170,24 @@ export function ShareModal({
     transition: "opacity 0.15s",
   };
 
-  const cardProps = {
-    givingPlayers,
-    receivingPlayers,
-    analysis,
-    flipped,
-  };
+  const cardProps = { givingPlayers, receivingPlayers, analysis, flipped };
 
   return (
     <>
-      {/* Hidden full-size card used only for PNG export.
-          Positioned off-screen so browser still renders it properly. */}
+      {/* Hidden export card — opacity 0 so it's always fully rendered.
+          Larger card width = bigger, more readable PNG. */}
       <div
         style={{
           position: "fixed",
           top: 0,
-          left: "-9999px",
+          left: 0,
+          width: EXPORT_CARD_W,
+          opacity: 0,
           pointerEvents: "none",
           zIndex: -1,
         }}
       >
-        <ShareCard ref={captureRef} {...cardProps} />
+        <ShareCard ref={captureRef} cardWidth={EXPORT_CARD_W} {...cardProps} />
       </div>
 
       {/* Overlay */}
@@ -190,7 +205,7 @@ export function ShareModal({
         }}
         onClick={onClose}
       >
-        {/* Modal — fixed height so preview area has a known size */}
+        {/* Modal */}
         <div
           style={{
             backgroundColor: "#1a1f2e",
@@ -198,14 +213,14 @@ export function ShareModal({
             border: "1px solid rgba(255,255,255,0.08)",
             width: "100%",
             maxWidth: 520,
-            height: "calc(100vh - 32px)",
+            maxHeight: "calc(100vh - 32px)",
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Modal header */}
+          {/* Header */}
           <div
             style={{
               display: "flex",
@@ -237,21 +252,20 @@ export function ShareModal({
             </button>
           </div>
 
-          {/* Preview area — fills remaining height, card is zoom-scaled to fit */}
+          {/* Preview */}
           <div
-            ref={previewAreaRef}
             style={{
               flex: 1,
               minHeight: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              overflowX: "hidden",
+              overflowY: allowScroll ? "auto" : "hidden",
               padding: "20px",
-              overflow: "hidden",
+              display: "flex",
+              justifyContent: "center",
             }}
           >
             <div style={{ zoom: previewScale } as React.CSSProperties}>
-              <ShareCard {...cardProps} />
+              <ShareCard ref={visibleCardRef} cardWidth={PREVIEW_CARD_W} {...cardProps} />
             </div>
           </div>
 
@@ -267,7 +281,6 @@ export function ShareModal({
               flexWrap: "wrap",
             }}
           >
-            {/* Flip button — always shown */}
             <button
               onClick={() => setFlipped((f) => !f)}
               disabled={busy}
@@ -283,7 +296,6 @@ export function ShareModal({
 
             <div style={{ flex: 1 }} />
 
-            {/* Mobile: single native share button */}
             {canNativeShare && (
               <button
                 onClick={handleShare}
@@ -294,7 +306,6 @@ export function ShareModal({
               </button>
             )}
 
-            {/* Desktop: Copy + Download */}
             {!canNativeShare && (
               <>
                 <button
