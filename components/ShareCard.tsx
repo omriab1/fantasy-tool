@@ -47,7 +47,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
     const maxRows = Math.max(leftPlayers.length, rightPlayers.length, 1);
 
     const colHeaderStyle: React.CSSProperties = {
-      padding: "10px 16px 6px",
+      padding: "10px 12px 6px",
       fontSize: 10,
       fontWeight: 700,
       letterSpacing: "0.12em",
@@ -55,13 +55,11 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
       textTransform: "uppercase",
     };
 
-    const playerCellStyle: React.CSSProperties = {
-      flex: 1,
-      padding: "5px 16px",
-      fontSize: 13,
-      color: "#e5e7eb",
-      lineHeight: 1.4,
-    };
+    // Helper: URL for ESPN images via same-origin proxy (avoids CORS in html-to-image)
+    const headshotUrl = (id: number) =>
+      `/api/espn/img?path=i/headshots/nba/players/full/${id}.png`;
+    const teamLogoUrl = (abbrev: string) =>
+      `/api/espn/img?path=i/teamlogos/nba/500/${abbrev}.png`;
 
     return (
       <div
@@ -120,7 +118,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             </div>
           </div>
 
-          {/* Player name rows */}
+          {/* Player rows — photo + name + position */}
           {Array.from({ length: maxRows }).map((_, i) => (
             <div
               key={i}
@@ -129,33 +127,171 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 borderTop: "1px solid rgba(255,255,255,0.04)",
               }}
             >
+              {/* Left player cell */}
               <div
                 style={{
-                  ...playerCellStyle,
-                  color: leftPlayers[i] ? "#e5e7eb" : "transparent",
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  minWidth: 0,
                 }}
               >
-                {leftPlayers[i]?.playerName ?? "\u00a0"}
+                {leftPlayers[i] ? (
+                  <>
+                    {/* Headshot + team badge */}
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={headshotUrl(leftPlayers[i].playerId)}
+                        alt=""
+                        width={28}
+                        height={28}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          backgroundColor: "rgba(255,255,255,0.08)",
+                        }}
+                      />
+                      {leftPlayers[i].teamAbbrev !== "0" && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={teamLogoUrl(leftPlayers[i].teamAbbrev)}
+                          alt=""
+                          width={12}
+                          height={12}
+                          style={{
+                            position: "absolute",
+                            bottom: -2,
+                            right: -2,
+                            width: 12,
+                            height: 12,
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            backgroundColor: "#0f1117",
+                            outline: "1.5px solid #0f1117",
+                          }}
+                        />
+                      )}
+                    </div>
+                    {/* Name */}
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: 12,
+                        color: "#e5e7eb",
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
+                        minWidth: 0,
+                      }}
+                    >
+                      {leftPlayers[i].playerName}
+                    </span>
+                    {/* Position */}
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "#6b7280",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {leftPlayers[i].position}
+                    </span>
+                  </>
+                ) : null}
               </div>
+
+              {/* Right player cell */}
               <div
                 style={{
-                  ...playerCellStyle,
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  minWidth: 0,
                   borderLeft: "1px solid rgba(255,255,255,0.08)",
-                  color: rightPlayers[i] ? "#e5e7eb" : "transparent",
                 }}
               >
-                {rightPlayers[i]?.playerName ?? "\u00a0"}
+                {rightPlayers[i] ? (
+                  <>
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={headshotUrl(rightPlayers[i].playerId)}
+                        alt=""
+                        width={28}
+                        height={28}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          backgroundColor: "rgba(255,255,255,0.08)",
+                        }}
+                      />
+                      {rightPlayers[i].teamAbbrev !== "0" && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={teamLogoUrl(rightPlayers[i].teamAbbrev)}
+                          alt=""
+                          width={12}
+                          height={12}
+                          style={{
+                            position: "absolute",
+                            bottom: -2,
+                            right: -2,
+                            width: 12,
+                            height: 12,
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            backgroundColor: "#0f1117",
+                            outline: "1.5px solid #0f1117",
+                          }}
+                        />
+                      )}
+                    </div>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: 12,
+                        color: "#e5e7eb",
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
+                        minWidth: 0,
+                      }}
+                    >
+                      {rightPlayers[i].playerName}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "#6b7280",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {rightPlayers[i].position}
+                    </span>
+                  </>
+                ) : null}
               </div>
             </div>
           ))}
 
           {/* Bottom padding */}
           <div style={{ display: "flex" }}>
-            <div style={{ flex: 1, padding: "5px 16px" }} />
+            <div style={{ flex: 1, padding: "4px 12px" }} />
             <div
               style={{
                 flex: 1,
-                padding: "5px 16px",
+                padding: "4px 12px",
                 borderLeft: "1px solid rgba(255,255,255,0.08)",
               }}
             />
@@ -183,7 +319,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
           </div>
           <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 5 }}>
             {winsForReceiving}W &mdash; {losses}L
-            {equals > 0 ? ` \u2014 ${equals}P` : ""}
+            {equals > 0 ? ` \u2014 ${equals}T` : ""}
           </div>
         </div>
 
@@ -268,7 +404,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
               : isLoss
               ? "rgba(248,113,113,0.08)"
               : "transparent";
-            const resultChar = isWin ? "W" : isLoss ? "L" : "P";
+            const resultChar = isWin ? "W" : isLoss ? "L" : "T";
             const resultColor = isWin
               ? "#4ade80"
               : isLoss
