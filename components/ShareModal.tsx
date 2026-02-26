@@ -87,7 +87,12 @@ export function ShareModal({
       const file = new File([blob], "trade-analysis.png", {
         type: "image/png",
       });
-      await navigator.share({ files: [file], title: "Trade Analysis" });
+      await navigator.share({
+        files: [file],
+        title: "Fantasy Tool",
+        text: "Check this new trade idea! 🏀 Fantasy Tool",
+        url: "https://fantasy-tool.app",
+      });
     } catch {
       // User cancelled share or browser error — no-op
     } finally {
