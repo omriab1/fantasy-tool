@@ -127,7 +127,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 style={{
                   flex: 1,
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 6,
                   padding: "6px 14px",
                   minWidth: 0,
@@ -138,18 +138,17 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     <span
                       style={{
                         flex: 1,
-                        fontSize: 12,
+                        fontSize: 11,
                         color: "#e5e7eb",
                         fontWeight: 500,
                         minWidth: 0,
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
+                        overflowWrap: "break-word",
+                        lineHeight: 1.35,
                       }}
                     >
                       {leftPlayers[i].playerName}
                     </span>
-                    <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0, paddingTop: 1 }}>
                       {leftPlayers[i].position}
                     </span>
                   </>
@@ -161,7 +160,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                 style={{
                   flex: 1,
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 6,
                   padding: "6px 14px",
                   minWidth: 0,
@@ -173,18 +172,17 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                     <span
                       style={{
                         flex: 1,
-                        fontSize: 12,
+                        fontSize: 11,
                         color: "#e5e7eb",
                         fontWeight: 500,
                         minWidth: 0,
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
+                        overflowWrap: "break-word",
+                        lineHeight: 1.35,
                       }}
                     >
                       {rightPlayers[i].playerName}
                     </span>
-                    <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, color: "#6b7280", flexShrink: 0, paddingTop: 1 }}>
                       {rightPlayers[i].position}
                     </span>
                   </>

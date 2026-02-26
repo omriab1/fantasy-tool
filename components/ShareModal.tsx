@@ -186,7 +186,8 @@ export function ShareModal({
           </button>
         </div>
 
-        {/* Card preview — also the capture target */}
+        {/* Card preview — also the capture target.
+            minHeight:0 is required for overflow-y scroll to work inside a flex column */}
         <div
           style={{
             overflowY: "auto",
@@ -195,6 +196,7 @@ export function ShareModal({
             display: "flex",
             justifyContent: "center",
             flexShrink: 1,
+            minHeight: 0,
           }}
         >
           <ShareCard ref={captureRef} {...cardProps} />
