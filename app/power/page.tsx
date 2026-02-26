@@ -10,6 +10,11 @@ import { WeekRangePicker } from "@/components/WeekRangePicker";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import Link from "next/link";
 
+function splitName(name: string): string[] {
+  const idx = name.indexOf(" ");
+  return idx === -1 ? [name] : [name.slice(0, idx), name.slice(idx + 1)];
+}
+
 function MatchupTooltip({
   teamName, opponentName, teamStats, oppStats, anchorLeft, anchorBottom,
 }: {
@@ -27,12 +32,16 @@ function MatchupTooltip({
         <thead>
           <tr className="border-b border-white/10">
             {/* name sits in the exact same column as the value data below it */}
-            <th className="w-16 pt-2 pb-1.5 text-center font-normal align-bottom">
-              <span className="text-white font-medium leading-tight">{teamName}</span>
+            <th className="w-16 pt-2 pb-1.5 text-center font-normal align-middle">
+              {splitName(teamName).map((part, i) => (
+                <span key={i} className="text-white font-medium leading-tight block">{part}</span>
+              ))}
             </th>
             <th className="w-11" />
-            <th className="w-16 pt-2 pb-1.5 text-center font-normal align-bottom">
-              <span className="text-gray-400 font-medium leading-tight">{opponentName}</span>
+            <th className="w-16 pt-2 pb-1.5 text-center font-normal align-middle">
+              {splitName(opponentName).map((part, i) => (
+                <span key={i} className="text-gray-400 font-medium leading-tight block">{part}</span>
+              ))}
             </th>
             <th className="w-14" />
             <th className="w-5" />
