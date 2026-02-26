@@ -10,6 +10,7 @@ import { PlayerBucket } from "@/components/PlayerBucket";
 import { CategoryTable } from "@/components/CategoryTable";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ShareModal } from "@/components/ShareModal";
 import type { StatsWindow } from "@/lib/types";
 import Link from "next/link";
 
@@ -22,6 +23,7 @@ export default function TradePage() {
   // Store only IDs — stats are derived live from the current player pool
   const [givingIds, setGivingIds] = useState<number[]>([]);
   const [receivingIds, setReceivingIds] = useState<number[]>([]);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     setLeagueId(localStorage.getItem("espn_leagueId") ?? "");
@@ -128,6 +130,21 @@ export default function TradePage() {
               <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
                 <CategoryTable mode="trade" results={analysis.results} />
               </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setShareOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-white/8 border border-white/12 text-gray-200 hover:bg-white/12 transition-colors"
+                >
+                  📤 Share
+                </button>
+              </div>
+              <ShareModal
+                open={shareOpen}
+                onClose={() => setShareOpen(false)}
+                givingPlayers={giving}
+                receivingPlayers={receiving}
+                analysis={analysis}
+              />
             </div>
           )}
 
