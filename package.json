@@ -9,6 +9,7 @@
     "test": "node test-power.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "html-to-image": "^1.11.13",
     "next": "16.1.6",
     "qrcode.react": "^4.2.0",
