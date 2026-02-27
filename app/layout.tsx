@@ -16,7 +16,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="pt-14 min-h-screen">
           {children}
         </main>
-        <Analytics />
+        <Analytics
+          beforeSend={(event) => {
+            const url = new URL(event.url);
+            if (url.pathname === "/") {
+              url.pathname = "/homepage";
+              return { ...event, url: url.toString() };
+            }
+            return event;
+          }}
+        />
       </body>
     </html>
   );
