@@ -95,14 +95,24 @@ function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): 
   };
 }
 
+const ALL_WINDOWS: StatsWindow[] = ["season", "30", "15", "7"];
+
 export function usePlayers(leagueId: string, espnS2: string, swid: string, window: StatsWindow) {
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // When the window changes and data is already cached, switch instantly without a fetch.
+  useEffect(() => {
+    if (!leagueId || !espnS2 || !swid) return;
+    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v4", leagueId, window));
+    if (cached) setPlayers(cached);
+  }, [leagueId, espnS2, swid, window]);
+
   const load = useCallback(() => {
     if (!leagueId || !espnS2 || !swid) return;
 
+    // If the requested window is already cached, show it immediately (no spinner).
     const key = cacheKey("players_v4", leagueId, window);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
@@ -130,13 +140,16 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
       })
       .then((data: unknown) => {
         const arr = Array.isArray(data) ? data : [];
-        const parsed: PlayerStats[] = [];
-        for (const p of arr) {
-          const stats = parsePlayerEntry(p as Record<string, unknown>, window);
-          if (stats) parsed.push(stats);
+        // Parse and cache ALL windows from this single response so switching is instant.
+        for (const w of ALL_WINDOWS) {
+          const parsed: PlayerStats[] = [];
+          for (const p of arr) {
+            const stats = parsePlayerEntry(p as Record<string, unknown>, w);
+            if (stats) parsed.push(stats);
+          }
+          cacheSet(cacheKey("players_v4", leagueId, w), parsed);
+          if (w === window) setPlayers(parsed);
         }
-        cacheSet(key, parsed);
-        setPlayers(parsed);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
