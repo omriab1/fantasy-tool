@@ -223,9 +223,12 @@ export default function ComparePage() {
 
           {hasCompared && (
             <div ref={resultsRef} className="scroll-mt-14 flex flex-col gap-4">
-              {/* Quick week select — change range without scrolling back up */}
-              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-4">
-                <div className="flex items-center gap-2 flex-wrap mb-2">
+              {/* Config label + quick week select — matches power rankings style */}
+              <div>
+                <p className="text-center text-xs text-gray-600 mb-2">
+                  {scoringConfigLabel(scoringConfig)}
+                </p>
+                <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
                   <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
                   {[1, 2, 3, 4, 6, 8].map((n) => {
                     const lastEnd = Math.max(1, league.scoringPeriodId - 1);
@@ -254,7 +257,7 @@ export default function ComparePage() {
                     Season
                   </button>
                 </div>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-gray-600 text-center">
                   {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
                 </p>
               </div>
@@ -273,9 +276,6 @@ export default function ComparePage() {
                     teamALogo={teamALogo}
                     teamBLogo={teamBLogo}
                   />
-                  <p className="text-center text-xs text-gray-600">
-                    {scoringConfigLabel(scoringConfig)}
-                  </p>
                   <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
                     <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
                   </div>
