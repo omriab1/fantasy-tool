@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { NavTabs } from "@/components/NavTabs";
-import { Analytics } from "@vercel/analytics/next";
+import { AnalyticsProvider } from "@/components/AnalyticsProvider";
 
 export const metadata: Metadata = {
   title: "Fantasy Tool",
@@ -16,16 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="pt-14 min-h-screen">
           {children}
         </main>
-        <Analytics
-          beforeSend={(event) => {
-            const url = new URL(event.url);
-            if (url.pathname === "/") {
-              url.pathname = "/homepage";
-              return { ...event, url: url.toString() };
-            }
-            return event;
-          }}
-        />
+        <AnalyticsProvider />
       </body>
     </html>
   );
