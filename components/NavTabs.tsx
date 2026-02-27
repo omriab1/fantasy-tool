@@ -22,7 +22,7 @@ export function NavTabs() {
     <>
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#1a1f2e] border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center h-14 px-3">
-          <Link href="/" className="text-white font-bold text-sm tracking-widest uppercase shrink-0 hover:text-gray-300 transition-colors">
+          <Link href="/homepage" className="text-white font-bold text-sm tracking-widest uppercase shrink-0 hover:text-gray-300 transition-colors">
             🏀 Fantasy Tool
           </Link>
 
