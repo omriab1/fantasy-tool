@@ -6,6 +6,7 @@ import { useLeague } from "@/hooks/useLeague";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { calcTradeScore } from "@/lib/trade-score";
 import { scoringConfigLabel } from "@/lib/scoring-config";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
 import { StatsWindowTabs } from "@/components/StatsWindowTabs";
 import { PlayerSearch } from "@/components/PlayerSearch";
 import { PlayerBucket } from "@/components/PlayerBucket";
@@ -13,13 +14,14 @@ import { CategoryTable } from "@/components/CategoryTable";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ShareModal } from "@/components/ShareModal";
-import type { StatsWindow } from "@/lib/types";
+import type { StatsWindow, EspnSport } from "@/lib/types";
 import Link from "next/link";
 
 export default function TradePage() {
   const [leagueId, setLeagueId] = useState("");
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
+  const [sport, setSport] = useState<EspnSport>("fba");
   const [statsWindow, setStatsWindow] = useState<StatsWindow>("season");
 
   const [givingIds, setGivingIds] = useState<number[]>([]);
@@ -27,14 +29,23 @@ export default function TradePage() {
   const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
-    setLeagueId(localStorage.getItem("espn_leagueId") ?? "");
+    const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
+    const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
+    setSport(validSport);
+    setLeagueId(
+      localStorage.getItem(`espn_leagueId_${validSport}`) ??
+      localStorage.getItem("espn_leagueId") ??
+      ""
+    );
     setEspnS2(localStorage.getItem("espn_s2") ?? "");
     setSwid(localStorage.getItem("espn_swid") ?? "");
   }, []);
 
+  const sportConfig = SPORT_CONFIGS[sport];
+
   // scoringConfig is auto-detected from league settings
-  const { scoringConfig } = useLeague(leagueId, espnS2, swid);
-  const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow);
+  const { scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
+  const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow, sport);
 
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
@@ -72,7 +83,11 @@ export default function TradePage() {
             Results update live — switch windows anytime
           </p>
         </div>
-        <StatsWindowTabs value={statsWindow} onChange={setStatsWindow} />
+        <StatsWindowTabs
+          value={statsWindow}
+          onChange={setStatsWindow}
+          availableWindows={sportConfig.availableWindows}
+        />
       </div>
 
       {noSettings && (
@@ -133,7 +148,7 @@ export default function TradePage() {
               />
               {/* Detected scoring config subtitle */}
               <p className="text-center text-xs text-gray-600">
-                {scoringConfigLabel(scoringConfig)}
+                {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
               </p>
               {scoringConfig.cats.some((c) => c.volumeStatIds) && (
                 <p className="text-center text-xs text-gray-700 -mt-2">
@@ -144,7 +159,11 @@ export default function TradePage() {
               {/* Quick stats-window select */}
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 <span className="text-xs text-gray-500 shrink-0">Stats window:</span>
-                <StatsWindowTabs value={statsWindow} onChange={setStatsWindow} />
+                <StatsWindowTabs
+                  value={statsWindow}
+                  onChange={setStatsWindow}
+                  availableWindows={sportConfig.availableWindows}
+                />
               </div>
 
               {/* Player summary — so user doesn't need to scroll back up */}
@@ -197,6 +216,7 @@ export default function TradePage() {
                 receivingPlayers={receiving}
                 analysis={analysis}
                 scoringConfig={scoringConfig}
+                sportEmoji={sportConfig.emoji}
               />
             </div>
           )}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
 import { parseLeagueScoringConfig, DEFAULT_SCORING_CONFIG } from "@/lib/scoring-config";
-import type { LeagueInfo, LeagueTeam, LeagueScoringConfig } from "@/lib/types";
+import type { LeagueInfo, LeagueTeam, LeagueScoringConfig, EspnSport } from "@/lib/types";
 
 function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
   const teams: LeagueTeam[] = ((data.teams as unknown[]) ?? []).map((t: unknown) => {
@@ -44,7 +44,7 @@ function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
   };
 }
 
-export function useLeague(leagueId: string, espnS2: string, swid: string) {
+export function useLeague(leagueId: string, espnS2: string, swid: string, sport: EspnSport = "fba") {
   const [league, setLeague] = useState<LeagueInfo | null>(null);
   const [scoringConfig, setScoringConfig] = useState<LeagueScoringConfig>(DEFAULT_SCORING_CONFIG);
   const [loading, setLoading] = useState(false);
@@ -53,15 +53,17 @@ export function useLeague(leagueId: string, espnS2: string, swid: string) {
   useEffect(() => {
     if (!leagueId || !espnS2 || !swid) return;
 
-    // Cache league info and raw settings separately.
+    // Cache keys include sport to isolate per-sport caches.
     // LeagueScoringConfig contains functions which cannot be JSON-serialised,
     // so we cache the plain settings object and re-parse on every restore.
-    const leagueKey   = cacheKey("league",   leagueId, "mTeam_v3");
-    const settingsKey = cacheKey("settings",  leagueId, "v1");
+    const leagueKey   = cacheKey("league",   leagueId, `${sport}_mTeam_v3`);
+    const settingsKey = cacheKey("settings",  leagueId, `${sport}_v1`);
 
-    // Remove the old v4 combined cache entry (it serialised compute functions → broken)
+    // Remove legacy NBA-only cache entries (no sport prefix)
     if (typeof window !== "undefined") {
-      localStorage.removeItem(cacheKey("league", leagueId, "v4"));
+      localStorage.removeItem(cacheKey("league",   leagueId, "mTeam_v3"));
+      localStorage.removeItem(cacheKey("settings", leagueId, "v1"));
+      localStorage.removeItem(cacheKey("league",   leagueId, "v4"));
     }
 
     const cachedLeague   = cacheGet<LeagueInfo>(leagueKey);
@@ -79,7 +81,7 @@ export function useLeague(leagueId: string, espnS2: string, swid: string) {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/espn/league?leagueId=${encodeURIComponent(leagueId)}`, {
+    fetch(`/api/espn/league?leagueId=${encodeURIComponent(leagueId)}&sport=${sport}`, {
       headers: { "x-espn-s2": espnS2, "x-espn-swid": swid },
     })
       .then(async (res) => {
@@ -110,7 +112,7 @@ export function useLeague(leagueId: string, espnS2: string, swid: string) {
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [leagueId, espnS2, swid]);
+  }, [leagueId, espnS2, swid, sport]);
 
   return { league, scoringConfig, loading, error };
 }

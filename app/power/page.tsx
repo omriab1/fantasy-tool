@@ -6,7 +6,8 @@ import { calcTradeScore } from "@/lib/trade-score";
 import { fmt } from "@/lib/stat-calculator";
 import { scoringConfigLabel } from "@/lib/scoring-config";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
-import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig } from "@/lib/types";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
+import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig, EspnSport } from "@/lib/types";
 import { WeekRangePicker } from "@/components/WeekRangePicker";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import Link from "next/link";
@@ -116,6 +117,7 @@ export default function PowerPage() {
   const [leagueId, setLeagueId] = useState("");
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
+  const [sport, setSport] = useState<EspnSport>("fba");
 
   const [startPeriod, setStartPeriod] = useState(1);
   const [endPeriod, setEndPeriod] = useState(1);
@@ -140,12 +142,21 @@ export default function PowerPage() {
   const [expandedType, setExpandedType] = useState<"W" | "L" | "T" | null>(null);
 
   useEffect(() => {
-    setLeagueId(localStorage.getItem("espn_leagueId") ?? "");
+    const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
+    const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
+    setSport(validSport);
+    setLeagueId(
+      localStorage.getItem(`espn_leagueId_${validSport}`) ??
+      localStorage.getItem("espn_leagueId") ??
+      ""
+    );
     setEspnS2(localStorage.getItem("espn_s2") ?? "");
     setSwid(localStorage.getItem("espn_swid") ?? "");
   }, []);
 
-  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid);
+  const sportConfig = SPORT_CONFIGS[sport];
+
+  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid, sport);
 
   useEffect(() => {
     if (!league) return;
@@ -180,12 +191,12 @@ export default function PowerPage() {
     setHasCalculated(true);
 
     try {
-      const ck = cacheKey("matchupv3", leagueId, String(league.scoringPeriodId));
+      const ck = cacheKey("matchupv3", leagueId, `${sport}_${league.scoringPeriodId}`);
       let data = cacheGet<Record<string, unknown>>(ck);
 
       if (!data) {
         const res = await fetch(
-          `/api/espn/weekly?leagueId=${encodeURIComponent(leagueId)}&period=${league.scoringPeriodId}`,
+          `/api/espn/weekly?leagueId=${encodeURIComponent(leagueId)}&period=${league.scoringPeriodId}&sport=${sport}`,
           { headers: { "x-espn-s2": espnS2, "x-espn-swid": swid } }
         );
         if (!res.ok) {
@@ -355,7 +366,7 @@ export default function PowerPage() {
     } finally {
       setCalculating(false);
     }
-  }, [leagueId, espnS2, swid, startPeriod, endPeriod, league, scoringConfig]);
+  }, [leagueId, espnS2, swid, startPeriod, endPeriod, league, scoringConfig, sport]);
 
   function handleExpandToggle(teamId: number, type: "W" | "L" | "T") {
     if (expandedTeamId === teamId && expandedType === type) {
@@ -436,7 +447,7 @@ export default function PowerPage() {
               {/* Config label + quick week select — first thing visible after scroll */}
               <div>
                 <p className="text-center text-xs text-gray-600 mb-2">
-                  {scoringConfigLabel(scoringConfig)}
+                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
                 </p>
                 <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
                   <span className="text-xs text-gray-500 shrink-0">Quick select:</span>

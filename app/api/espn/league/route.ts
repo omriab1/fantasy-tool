@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/2026/segments/0/leagues";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
+import type { EspnSport } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const leagueId = searchParams.get("leagueId");
+  const sport = (searchParams.get("sport") ?? "fba") as EspnSport;
+  const cfg = SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba;
   const espnS2 = req.headers.get("x-espn-s2") ?? "";
   const swid = req.headers.get("x-espn-swid") ?? "";
 
@@ -12,7 +14,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing leagueId" }, { status: 400 });
   }
 
-  const url = `${ESPN_BASE}/${leagueId}?view=mTeam&view=mSettings&view=mStatus&view=mRoster`;
+  const base = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${cfg.sport}/seasons/${cfg.seasonYear}/segments/0/leagues`;
+  const url = `${base}/${leagueId}?view=mTeam&view=mSettings&view=mStatus&view=mRoster`;
 
   try {
     const res = await fetch(url, {
