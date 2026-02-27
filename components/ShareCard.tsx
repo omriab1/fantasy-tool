@@ -2,14 +2,14 @@
 
 import { forwardRef } from "react";
 import { fmt, aggregateStats } from "@/lib/stat-calculator";
-import { LOWER_IS_BETTER } from "@/lib/types";
 import { calcTradeScore } from "@/lib/trade-score";
-import type { PlayerStats, TradeAnalysis } from "@/lib/types";
+import type { PlayerStats, TradeAnalysis, LeagueScoringConfig } from "@/lib/types";
 
 export interface ShareCardProps {
   givingPlayers: PlayerStats[];
   receivingPlayers: PlayerStats[];
   analysis: TradeAnalysis;
+  scoringConfig: LeagueScoringConfig;
   flipped: boolean;
   /** Card width in px — all internal sizes scale proportionally. Default 480. */
   cardWidth?: number;
@@ -19,7 +19,7 @@ export interface ShareCardProps {
 const BASE = 480;
 
 export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
-  ({ givingPlayers, receivingPlayers, analysis, flipped, cardWidth = BASE }, ref) => {
+  ({ givingPlayers, receivingPlayers, analysis, scoringConfig, flipped, cardWidth = BASE }, ref) => {
     const s = cardWidth / BASE;
     const sc = (n: number) => Math.round(n * s); // scaled px value
 
@@ -27,7 +27,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
     const rightPlayers = flipped ? givingPlayers : receivingPlayers;
 
     const displayAnalysis: TradeAnalysis = flipped
-      ? calcTradeScore(aggregateStats(receivingPlayers), aggregateStats(givingPlayers))
+      ? calcTradeScore(aggregateStats(receivingPlayers, scoringConfig), aggregateStats(givingPlayers, scoringConfig), scoringConfig)
       : analysis;
 
     const { winsForReceiving, losses, equals } = displayAnalysis;
@@ -244,95 +244,127 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
         </div>
 
         {/* Category table */}
-        <div style={{ paddingTop: sc(12), paddingBottom: sc(24) }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              padding: `${sc(4)}px ${sc(18)}px ${sc(6)}px`,
-            }}
-          >
-            {[
-              { w: sc(76), align: "center" as const, label: "CAT" },
-              { w: sc(90), align: "center" as const, label: "GIVE" },
-              { w: sc(90), align: "center" as const, label: "RECV" },
-              { w: undefined, align: "center" as const, label: "DIFF" },
-              { w: sc(42), align: "center" as const, label: "RES" },
-            ].map(({ w, align, label }) => (
+        {(() => {
+          const hasVol = displayAnalysis.results.some((r) => r.givingVol || r.receivingVol);
+          return (
+            <div style={{ paddingTop: sc(12), paddingBottom: hasVol ? sc(4) : sc(24) }}>
               <div
-                key={label}
-                style={{
-                  ...(w ? { width: w } : { flex: 1 }),
-                  textAlign: align,
-                  fontSize: sc(10),
-                  color: "#4b5563",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                }}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-
-          {displayAnalysis.results.map((row) => {
-            const isWin = row.winner === "receiving";
-            const isLoss = row.winner === "giving";
-            const bgColor = isWin
-              ? "rgba(74,222,128,0.08)"
-              : isLoss
-              ? "rgba(248,113,113,0.08)"
-              : "transparent";
-            const resultChar = isWin ? "W" : isLoss ? "L" : "T";
-            const resultColor = isWin ? "#4ade80" : isLoss ? "#f87171" : "#9ca3af";
-            const deltaStr = (row.delta > 0 ? "+" : "") + fmt(row.delta, row.category);
-
-            return (
-              <div
-                key={row.category}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  padding: `${sc(6)}px ${sc(18)}px`,
-                  backgroundColor: bgColor,
+                  padding: `${sc(4)}px ${sc(18)}px ${sc(6)}px`,
                 }}
               >
-                <div
-                  style={{
-                    width: sc(76),
-                    textAlign: "center",
-                    fontSize: sc(13),
-                    color: "#9ca3af",
-                    fontWeight: 600,
-                    letterSpacing: "0.03em",
-                  }}
-                >
-                  {row.category}
-                </div>
-                <div style={{ width: sc(90), textAlign: "center", fontSize: sc(14), color: "#d1d5db" }}>
-                  {fmt(row.giving, row.category)}
-                </div>
-                <div style={{ width: sc(90), textAlign: "center", fontSize: sc(14), color: "#d1d5db" }}>
-                  {fmt(row.receiving, row.category)}
-                </div>
-                <div style={{ flex: 1, textAlign: "center", fontSize: sc(13), color: "#6b7280" }}>
-                  {deltaStr}
-                </div>
-                <div
-                  style={{
-                    width: sc(42),
-                    textAlign: "center",
-                    fontSize: sc(13),
-                    fontWeight: 700,
-                    color: resultColor,
-                  }}
-                >
-                  {resultChar}
-                </div>
+                {[
+                  { w: sc(76), align: "center" as const, label: "CAT" },
+                  { w: sc(90), align: "center" as const, label: "GIVE" },
+                  { w: sc(90), align: "center" as const, label: "RECV" },
+                  { w: undefined, align: "center" as const, label: "DIFF" },
+                  { w: sc(42), align: "center" as const, label: "RES" },
+                ].map(({ w, align, label }) => (
+                  <div
+                    key={label}
+                    style={{
+                      ...(w ? { width: w } : { flex: 1 }),
+                      textAlign: align,
+                      fontSize: sc(10),
+                      color: "#4b5563",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    {label}
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+
+              {displayAnalysis.results.map((row) => {
+                const isWin = row.winner === "receiving";
+                const isLoss = row.winner === "giving";
+                const bgColor = isWin
+                  ? "rgba(74,222,128,0.08)"
+                  : isLoss
+                  ? "rgba(248,113,113,0.08)"
+                  : "transparent";
+                const resultChar = isWin ? "W" : isLoss ? "L" : "T";
+                const resultColor = isWin ? "#4ade80" : isLoss ? "#f87171" : "#9ca3af";
+                const deltaStr = (row.delta > 0 ? "+" : "") + fmt(row.delta, row.category);
+
+                return (
+                  <div
+                    key={row.category}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: `${sc(6)}px ${sc(18)}px`,
+                      backgroundColor: bgColor,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: sc(76),
+                        textAlign: "center",
+                        fontSize: sc(13),
+                        color: "#9ca3af",
+                        fontWeight: 600,
+                        letterSpacing: "0.03em",
+                      }}
+                    >
+                      {row.category}
+                    </div>
+                    <div style={{ width: sc(90), textAlign: "center" }}>
+                      <div style={{ fontSize: sc(14), color: "#d1d5db" }}>
+                        {fmt(row.giving, row.category)}
+                      </div>
+                      {row.givingVol && (
+                        <div style={{ fontSize: sc(10), color: "#4b5563", marginTop: sc(1) }}>
+                          {row.givingVol[0].toFixed(1)}/{row.givingVol[1].toFixed(1)}*
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ width: sc(90), textAlign: "center" }}>
+                      <div style={{ fontSize: sc(14), color: "#d1d5db" }}>
+                        {fmt(row.receiving, row.category)}
+                      </div>
+                      {row.receivingVol && (
+                        <div style={{ fontSize: sc(10), color: "#4b5563", marginTop: sc(1) }}>
+                          {row.receivingVol[0].toFixed(1)}/{row.receivingVol[1].toFixed(1)}*
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, textAlign: "center", fontSize: sc(13), color: "#6b7280" }}>
+                      {deltaStr}
+                    </div>
+                    <div
+                      style={{
+                        width: sc(42),
+                        textAlign: "center",
+                        fontSize: sc(13),
+                        fontWeight: 700,
+                        color: resultColor,
+                      }}
+                    >
+                      {resultChar}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {hasVol && (
+                <div
+                  style={{
+                    padding: `${sc(10)}px ${sc(18)}px ${sc(20)}px`,
+                    textAlign: "center",
+                  }}
+                >
+                  <span style={{ fontSize: sc(10), color: "#4b5563" }}>
+                    * Made/attempted shown per game as displayed on ESPN · % uses full volume accuracy
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   }

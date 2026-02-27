@@ -2,25 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
-import type { LeagueInfo, LeagueTeam } from "@/lib/types";
+import { parseLeagueScoringConfig, DEFAULT_SCORING_CONFIG } from "@/lib/scoring-config";
+import type { LeagueInfo, LeagueTeam, LeagueScoringConfig } from "@/lib/types";
 
 function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
   const teams: LeagueTeam[] = ((data.teams as unknown[]) ?? []).map((t: unknown) => {
     const team = t as Record<string, unknown>;
 
-    // ESPN returns `name` directly on the team object
     const name = (team.name as string)
       || `${(team.location as string) ?? ""} ${(team.nickname as string) ?? ""}`.trim()
       || (team.abbrev as string)
       || `Team ${team.id}`;
 
-    // Extract current roster player IDs from mRoster view
     const rosterEntries = ((team.roster as Record<string, unknown>)?.entries ?? []) as unknown[];
     const rosterPlayerIds = rosterEntries
       .map((e) => (e as Record<string, unknown>).playerId as number)
       .filter(Boolean);
 
-    // primaryOwner may be a string or in an owners array
     const primaryOwner =
       (team.primaryOwner as string) ??
       ((team.owners as string[])?.[0]) ??
@@ -39,7 +37,6 @@ function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
   return {
     leagueId: String(data.id ?? ""),
     seasonId: (data.seasonId as number) ?? 2026,
-    // Use currentMatchupPeriod from status (local week #), not global scoringPeriodId
     scoringPeriodId: ((data.status as Record<string, unknown>)?.currentMatchupPeriod as number)
       ?? (data.scoringPeriodId as number)
       ?? 1,
@@ -49,16 +46,33 @@ function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
 
 export function useLeague(leagueId: string, espnS2: string, swid: string) {
   const [league, setLeague] = useState<LeagueInfo | null>(null);
+  const [scoringConfig, setScoringConfig] = useState<LeagueScoringConfig>(DEFAULT_SCORING_CONFIG);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!leagueId || !espnS2 || !swid) return;
 
-    const key = cacheKey("league", leagueId, "mTeam_v3");
-    const cached = cacheGet<LeagueInfo>(key);
-    if (cached) {
-      setLeague(cached);
+    // Cache league info and raw settings separately.
+    // LeagueScoringConfig contains functions which cannot be JSON-serialised,
+    // so we cache the plain settings object and re-parse on every restore.
+    const leagueKey   = cacheKey("league",   leagueId, "mTeam_v3");
+    const settingsKey = cacheKey("settings",  leagueId, "v1");
+
+    // Remove the old v4 combined cache entry (it serialised compute functions → broken)
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(cacheKey("league", leagueId, "v4"));
+    }
+
+    const cachedLeague   = cacheGet<LeagueInfo>(leagueKey);
+    const cachedSettings = cacheGet<unknown>(settingsKey);
+
+    // Only use the cache if BOTH entries exist — if settings are missing, fall through to fetch
+    // so we always have the real scoring config (not the default fallback).
+    if (cachedLeague && cachedSettings) {
+      setLeague(cachedLeague);
+      // Re-parse config from cached raw settings (functions survive this way)
+      setScoringConfig(parseLeagueScoringConfig(cachedSettings));
       return;
     }
 
@@ -84,13 +98,19 @@ export function useLeague(leagueId: string, espnS2: string, swid: string) {
         return res.json();
       })
       .then((data: Record<string, unknown>) => {
-        const info = parseLeagueData(data);
-        cacheSet(key, info);
+        const info   = parseLeagueData(data);
+        const config = parseLeagueScoringConfig(data.settings);
+
+        // Cache league info + raw settings (both are plain JSON — no functions)
+        cacheSet(leagueKey,   info);
+        cacheSet(settingsKey, data.settings);
+
         setLeague(info);
+        setScoringConfig(config);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [leagueId, espnS2, swid]);
 
-  return { league, loading, error };
+  return { league, scoringConfig, loading, error };
 }

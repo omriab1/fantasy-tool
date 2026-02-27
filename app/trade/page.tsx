@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { usePlayers } from "@/hooks/usePlayers";
+import { useLeague } from "@/hooks/useLeague";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { calcTradeScore } from "@/lib/trade-score";
+import { scoringConfigLabel } from "@/lib/scoring-config";
 import { StatsWindowTabs } from "@/components/StatsWindowTabs";
 import { PlayerSearch } from "@/components/PlayerSearch";
 import { PlayerBucket } from "@/components/PlayerBucket";
@@ -20,7 +22,6 @@ export default function TradePage() {
   const [swid, setSwid] = useState("");
   const [statsWindow, setStatsWindow] = useState<StatsWindow>("season");
 
-  // Store only IDs — stats are derived live from the current player pool
   const [givingIds, setGivingIds] = useState<number[]>([]);
   const [receivingIds, setReceivingIds] = useState<number[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
@@ -31,15 +32,15 @@ export default function TradePage() {
     setSwid(localStorage.getItem("espn_swid") ?? "");
   }, []);
 
+  // scoringConfig is auto-detected from league settings
+  const { scoringConfig } = useLeague(leagueId, espnS2, swid);
   const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow);
 
-  // Fast lookup map — rebuilds when window changes (new player pool loaded)
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
     [players]
   );
 
-  // Derive full stats from current pool — auto-updates when window changes
   const giving = useMemo(
     () => givingIds.map((id) => playerMap.get(id)).filter(Boolean) as typeof players,
     [givingIds, playerMap]
@@ -49,12 +50,15 @@ export default function TradePage() {
     [receivingIds, playerMap]
   );
 
-  // Analysis is computed live — updates whenever buckets or window changes
   const analysis = useMemo(() => {
     if (givingIds.length === 0 && receivingIds.length === 0) return null;
     if (players.length === 0) return null;
-    return calcTradeScore(aggregateStats(giving), aggregateStats(receiving));
-  }, [giving, receiving, givingIds, receivingIds, players]);
+    return calcTradeScore(
+      aggregateStats(giving, scoringConfig),
+      aggregateStats(receiving, scoringConfig),
+      scoringConfig,
+    );
+  }, [giving, receiving, givingIds, receivingIds, players, scoringConfig]);
 
   const allBucketedIds = [...givingIds, ...receivingIds];
   const noSettings = !leagueId || !espnS2 || !swid;
@@ -127,6 +131,54 @@ export default function TradePage() {
                 equals={analysis.equals}
                 total={analysis.totalCats}
               />
+              {/* Detected scoring config subtitle */}
+              <p className="text-center text-xs text-gray-600">
+                {scoringConfigLabel(scoringConfig)}
+              </p>
+              {scoringConfig.cats.some((c) => c.volumeStatIds) && (
+                <p className="text-center text-xs text-gray-700 -mt-2">
+                  {scoringConfig.cats.filter((c) => c.volumeStatIds).map((c) => c.id.replace("%", "").trim()).join(", ")} made/attempted shown as on ESPN · % uses full accuracy
+                </p>
+              )}
+
+              {/* Quick stats-window select */}
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500 shrink-0">Stats window:</span>
+                <StatsWindowTabs value={statsWindow} onChange={setStatsWindow} />
+              </div>
+
+              {/* Player summary — so user doesn't need to scroll back up */}
+              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-4 max-w-lg mx-auto w-full">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-red-400 mb-2">You Give</p>
+                    {giving.length === 0 ? (
+                      <p className="text-xs text-gray-600">—</p>
+                    ) : (
+                      giving.map((p) => (
+                        <div key={p.playerId} className="py-0.5">
+                          <span className="text-sm text-gray-300">{p.playerName}</span>
+                          <span className="text-xs text-gray-600 ml-1.5">{p.position}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-green-400 mb-2">You Receive</p>
+                    {receiving.length === 0 ? (
+                      <p className="text-xs text-gray-600">—</p>
+                    ) : (
+                      receiving.map((p) => (
+                        <div key={p.playerId} className="py-0.5">
+                          <span className="text-sm text-gray-300">{p.playerName}</span>
+                          <span className="text-xs text-gray-600 ml-1.5">{p.position}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
                 <CategoryTable mode="trade" results={analysis.results} />
               </div>
@@ -144,6 +196,7 @@ export default function TradePage() {
                 givingPlayers={giving}
                 receivingPlayers={receiving}
                 analysis={analysis}
+                scoringConfig={scoringConfig}
               />
             </div>
           )}

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { ShareCard } from "./ShareCard";
-import type { PlayerStats, TradeAnalysis } from "@/lib/types";
+import type { PlayerStats, TradeAnalysis, LeagueScoringConfig } from "@/lib/types";
 
 interface ShareModalProps {
   open: boolean;
@@ -10,6 +10,7 @@ interface ShareModalProps {
   givingPlayers: PlayerStats[];
   receivingPlayers: PlayerStats[];
   analysis: TradeAnalysis;
+  scoringConfig: LeagueScoringConfig;
 }
 
 // Preview card base width. Modal is 520px max; with 20px padding each side
@@ -26,6 +27,7 @@ export function ShareModal({
   givingPlayers,
   receivingPlayers,
   analysis,
+  scoringConfig,
 }: ShareModalProps) {
   const [flipped, setFlipped] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "copying" | "sharing">("idle");
@@ -170,7 +172,7 @@ export function ShareModal({
     transition: "opacity 0.15s",
   };
 
-  const cardProps = { givingPlayers, receivingPlayers, analysis, flipped };
+  const cardProps = { givingPlayers, receivingPlayers, analysis, scoringConfig, flipped };
 
   return (
     <>

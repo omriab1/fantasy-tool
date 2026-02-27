@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useLeague } from "@/hooks/useLeague";
 import { calcTradeScore } from "@/lib/trade-score";
 import { fmt } from "@/lib/stat-calculator";
+import { scoringConfigLabel } from "@/lib/scoring-config";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
-import type { AggregatedStats, PowerMatchup, PowerRankEntry } from "@/lib/types";
+import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig } from "@/lib/types";
 import { WeekRangePicker } from "@/components/WeekRangePicker";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import Link from "next/link";
@@ -15,14 +16,31 @@ function splitName(name: string): string[] {
   return idx === -1 ? [name] : [name.slice(0, idx), name.slice(idx + 1)];
 }
 
+// Per-team accumulator: raw stat totals by ESPN stat ID.
+// Key -1 is reserved for the week count.
+const WEEKS_KEY = -1;
+type WeekAccum = Record<number, number>;
+
+const initAccum = (): WeekAccum => ({ [WEEKS_KEY]: 0 });
+
+function accumToStats(acc: WeekAccum, config: LeagueScoringConfig): AggregatedStats {
+  const weeks = Math.max(acc[WEEKS_KEY] ?? 0, 1);
+  const result: AggregatedStats = {};
+  for (const cat of config.cats) {
+    result[cat.id] = cat.compute(acc, weeks);
+  }
+  return result;
+}
+
 function MatchupTooltip({
-  teamName, opponentName, teamStats, oppStats, anchorLeft, anchorBottom,
+  teamName, opponentName, teamStats, oppStats, scoringConfig, anchorLeft, anchorBottom,
 }: {
   teamName: string; opponentName: string;
   teamStats: AggregatedStats; oppStats: AggregatedStats;
+  scoringConfig: LeagueScoringConfig;
   anchorLeft: number; anchorBottom: number;
 }) {
-  const catResults = calcTradeScore(teamStats, oppStats).results;
+  const catResults = calcTradeScore(teamStats, oppStats, scoringConfig).results;
   return (
     <div
       style={{ position: "fixed", left: anchorLeft, bottom: anchorBottom, zIndex: 100 }}
@@ -31,7 +49,6 @@ function MatchupTooltip({
       <table className="text-xs border-separate border-spacing-0">
         <thead>
           <tr className="border-b border-white/10">
-            {/* name sits in the exact same column as the value data below it */}
             <th className="w-16 pt-2 pb-1.5 text-center font-normal align-middle">
               {splitName(teamName).map((part, i) => (
                 <span key={i} className="text-white font-medium leading-tight block">{part}</span>
@@ -46,7 +63,6 @@ function MatchupTooltip({
             <th className="w-14" />
             <th className="w-5" />
           </tr>
-          {/* thin separator so header feels attached to data */}
           <tr><td colSpan={5} className="border-b border-white/10 p-0" /></tr>
         </thead>
         <tbody>
@@ -92,34 +108,6 @@ function MatchupTooltip({
   );
 }
 
-// Per-team accumulator for summing raw stats across matchup weeks
-interface WeekAccum {
-  pts: number; reb: number; ast: number; stl: number; blk: number;
-  to: number; threepm: number; fgm: number; fga: number; ftm: number; fta: number;
-  weeks: number;
-}
-
-const initAccum = (): WeekAccum => ({
-  pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
-  to: 0, threepm: 0, fgm: 0, fga: 0, ftm: 0, fta: 0,
-  weeks: 0,
-});
-
-function accumToStats(acc: WeekAccum): AggregatedStats {
-  const w = Math.max(acc.weeks, 1);
-  return {
-    PTS: acc.pts / w,
-    REB: acc.reb / w,
-    AST: acc.ast / w,
-    STL: acc.stl / w,
-    BLK: acc.blk / w,
-    TO:  acc.to  / w,
-    "3PM": acc.threepm / w,
-    "AFG%": acc.fga > 0 ? (acc.fgm + 0.5 * acc.threepm) / acc.fga : 0,
-    "FT%":  acc.fta > 0 ? acc.ftm / acc.fta : 0,
-  };
-}
-
 interface RankedEntry extends PowerRankEntry {
   rank: number;
 }
@@ -135,6 +123,11 @@ export default function PowerPage() {
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rankings, setRankings] = useState<RankedEntry[] | null>(null);
+  const [hasCalculated, setHasCalculated] = useState(false);
+
+  const autoCalculate = useRef(false);
+  const shouldScrollRef = useRef(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const [teamStatsMap, setTeamStatsMap] = useState<Record<number, AggregatedStats> | null>(null);
   const [hoveredMatchup, setHoveredMatchup] = useState<{
@@ -152,9 +145,8 @@ export default function PowerPage() {
     setSwid(localStorage.getItem("espn_swid") ?? "");
   }, []);
 
-  const { league, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid);
+  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid);
 
-  // Init week range to last completed week
   useEffect(() => {
     if (!league) return;
     const lastCompleted = Math.max(1, league.scoringPeriodId - 1);
@@ -163,8 +155,19 @@ export default function PowerPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.leagueId]);
 
-  // Reset results when range changes
   useEffect(() => { setRankings(null); setTeamStatsMap(null); }, [startPeriod, endPeriod]);
+
+  // Auto-calculate on range change (only after first manual Calculate press)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoCalculate.current) handleCalculate(); }, [startPeriod, endPeriod]);
+
+  // Scroll to results after a manual Calculate press
+  useEffect(() => {
+    if (rankings !== null && shouldScrollRef.current) {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      shouldScrollRef.current = false;
+    }
+  }, [rankings]);
 
   const handleCalculate = useCallback(async () => {
     if (!leagueId || !espnS2 || !swid || !league) return;
@@ -174,9 +177,9 @@ export default function PowerPage() {
     setTeamStatsMap(null);
     setExpandedTeamId(null);
     setExpandedType(null);
+    setHasCalculated(true);
 
     try {
-      // Fetch full-season mMatchup schedule (same cache key as compare page)
       const ck = cacheKey("matchupv3", leagueId, String(league.scoringPeriodId));
       let data = cacheGet<Record<string, unknown>>(ck);
 
@@ -195,7 +198,6 @@ export default function PowerPage() {
 
       const schedule = (data.schedule as unknown[]) ?? [];
 
-      // Build per-team accumulators for ALL teams in the league
       const accumMap = new Map<number, WeekAccum>();
       for (const team of league.teams) {
         accumMap.set(team.id, initAccum());
@@ -218,25 +220,17 @@ export default function PowerPage() {
             const sbs = cs?.scoreByStat as Record<string, { score: number }> | undefined;
             if (!sbs) continue;
 
-            const get = (id: number) => sbs[String(id)]?.score ?? 0;
-            acc.pts     += get(0);
-            acc.blk     += get(1);
-            acc.stl     += get(2);
-            acc.ast     += get(3);
-            acc.reb     += get(6);
-            acc.to      += get(11);
-            acc.fgm     += get(13);
-            acc.fga     += get(14);
-            acc.ftm     += get(15);
-            acc.fta     += get(16);
-            acc.threepm += get(17);
-            acc.weeks++;
+            // Collect ALL stat IDs from scoreByStat — cat.compute picks what it needs
+            for (const [sidStr, entry] of Object.entries(sbs)) {
+              const sid = parseInt(sidStr, 10);
+              if (!isNaN(sid)) acc[sid] = (acc[sid] ?? 0) + entry.score;
+            }
+            acc[WEEKS_KEY]++;
           }
         }
       }
 
-      // Verify we got data for at least one team
-      const totalWeeks = Array.from(accumMap.values()).reduce((s, a) => s + a.weeks, 0);
+      const totalWeeks = Array.from(accumMap.values()).reduce((s, a) => s + (a[WEEKS_KEY] ?? 0), 0);
       if (totalWeeks === 0) {
         throw new Error(
           "No matchup data found for the selected week range. " +
@@ -244,13 +238,11 @@ export default function PowerPage() {
         );
       }
 
-      // Compute averaged stats per team
       const statsMap: Record<number, AggregatedStats> = {};
       for (const team of league.teams) {
-        statsMap[team.id] = accumToStats(accumMap.get(team.id)!);
+        statsMap[team.id] = accumToStats(accumMap.get(team.id)!, scoringConfig);
       }
 
-      // Initialize rank entries
       const entriesMap = new Map<number, PowerRankEntry>();
       for (const team of league.teams) {
         entriesMap.set(team.id, {
@@ -265,15 +257,12 @@ export default function PowerPage() {
         });
       }
 
-      // Full round-robin
       const teams = league.teams;
       for (let i = 0; i < teams.length; i++) {
         for (let j = i + 1; j < teams.length; j++) {
           const teamA = teams[i];
           const teamB = teams[j];
-          // calcTradeScore(giving=A, receiving=B)
-          // losses = cats A won, winsForReceiving = cats B won
-          const result = calcTradeScore(statsMap[teamA.id], statsMap[teamB.id]);
+          const result = calcTradeScore(statsMap[teamA.id], statsMap[teamB.id], scoringConfig);
           const aCatWins = result.losses;
           const bCatWins = result.winsForReceiving;
           const pushes   = result.equals;
@@ -316,25 +305,21 @@ export default function PowerPage() {
         }
       }
 
-      // Compute win% for each entry
       const entries = Array.from(entriesMap.values());
       for (const entry of entries) {
         const total = entry.wins + entry.losses + entry.ties;
         entry.winPct = total > 0 ? ((entry.wins + 0.5 * entry.ties) / total) * 100 : 0;
       }
 
-      // Primary sort: wins desc → losses asc → winPct desc
       entries.sort((a, b) => {
         if (b.wins !== a.wins) return b.wins - a.wins;
         if (a.losses !== b.losses) return a.losses - b.losses;
         return b.winPct - a.winPct;
       });
 
-      // Assign ranks; tied groups share a rank, sorted within by head-to-head
       const ranked: RankedEntry[] = [];
       let idx = 0;
       while (idx < entries.length) {
-        // Find end of tied group (same W-L-T)
         let jdx = idx + 1;
         while (
           jdx < entries.length &&
@@ -348,7 +333,6 @@ export default function PowerPage() {
         const group = entries.slice(idx, jdx);
         const rank = idx + 1;
 
-        // Sort within tied group by head-to-head: winner goes first
         if (group.length > 1) {
           group.sort((a, b) => {
             const m = a.matchups.find((mu) => mu.opponentId === b.teamId);
@@ -361,7 +345,6 @@ export default function PowerPage() {
         for (const entry of group) {
           ranked.push({ ...entry, rank });
         }
-
         idx = jdx;
       }
 
@@ -372,7 +355,7 @@ export default function PowerPage() {
     } finally {
       setCalculating(false);
     }
-  }, [leagueId, espnS2, swid, startPeriod, endPeriod, league]);
+  }, [leagueId, espnS2, swid, startPeriod, endPeriod, league, scoringConfig]);
 
   function handleExpandToggle(teamId: number, type: "W" | "L" | "T") {
     if (expandedTeamId === teamId && expandedType === type) {
@@ -404,7 +387,6 @@ export default function PowerPage() {
       )}
 
       {leagueError && <div className="mb-6"><ErrorBanner message={leagueError} /></div>}
-      {error && <div className="mb-6"><ErrorBanner message={error} onRetry={handleCalculate} /></div>}
       {leagueLoading && <div className="text-center py-8 text-gray-500 text-sm">Loading league…</div>}
 
       {hoveredMatchup && teamStatsMap && (
@@ -413,6 +395,7 @@ export default function PowerPage() {
           opponentName={hoveredMatchup.opponentName}
           teamStats={teamStatsMap[hoveredMatchup.teamId]}
           oppStats={teamStatsMap[hoveredMatchup.opponentId]}
+          scoringConfig={scoringConfig}
           anchorLeft={hoveredMatchup.anchorLeft}
           anchorBottom={hoveredMatchup.anchorBottom}
         />
@@ -420,6 +403,12 @@ export default function PowerPage() {
 
       {league && !leagueLoading && (
         <>
+          {scoringConfig.format === "roto" && (
+            <div className="mb-4 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-300">
+              Power Rankings is a head-to-head simulation. Your Roto league&apos;s actual standings are based on season totals.
+            </div>
+          )}
+
           <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 mb-6">
             <WeekRangePicker
               currentPeriod={league.scoringPeriodId}
@@ -433,7 +422,7 @@ export default function PowerPage() {
             </p>
             <div className="mt-6 flex justify-end">
               <button
-                onClick={handleCalculate}
+                onClick={() => { shouldScrollRef.current = true; autoCalculate.current = true; handleCalculate(); }}
                 disabled={calculating}
                 className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-8 py-2.5 rounded-lg transition-colors"
               >
@@ -442,154 +431,200 @@ export default function PowerPage() {
             </div>
           </div>
 
-          {rankings && (
-            <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 text-gray-500 text-xs uppercase tracking-wider">
-                    <th className="px-2 py-2.5 text-left">#</th>
-                    <th className="px-2 py-2.5 text-left">Team</th>
-                    <th className="px-2 py-2.5 text-center">W</th>
-                    <th className="px-2 py-2.5 text-center">L</th>
-                    <th className="px-2 py-2.5 text-center">T</th>
-                    <th className="px-2 py-2.5 text-center">W%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rankings.map((entry) => {
-                    const isExpanded = expandedTeamId === entry.teamId;
-                    const showBreakdown = isExpanded && expandedType !== null;
-                    const breakdownMatchups = expandedType
-                      ? entry.matchups.filter((m) => m.result === expandedType)
-                      : [];
-
+          {hasCalculated && (
+            <div ref={resultsRef} className="scroll-mt-14 flex flex-col gap-4">
+              {/* Config label + quick week select — first thing visible after scroll */}
+              <div>
+                <p className="text-center text-xs text-gray-600 mb-2">
+                  {scoringConfigLabel(scoringConfig)}
+                </p>
+                <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                  <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
+                  {[1, 2, 3, 4, 6, 8].map((n) => {
+                    const lastEnd = Math.max(1, league.scoringPeriodId - 1);
+                    const presetStart = Math.max(1, lastEnd - n + 1);
+                    const active = startPeriod === presetStart && endPeriod === lastEnd;
                     return (
-                      <Fragment key={entry.teamId}>
-                        <tr
-                          className="border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer"
-                          onClick={() => {
-                            setExpandedTeamId(null);
-                            setExpandedType(null);
-                          }}
-                        >
-                          <td className="px-2 py-2.5 text-gray-500 font-mono">{entry.rank}</td>
-                          <td className="px-2 py-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-6 h-6 shrink-0">
-                                {entry.teamLogo && (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={entry.teamLogo}
-                                    alt=""
-                                    className="w-6 h-6 rounded-sm object-contain"
-                                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                                  />
-                                )}
-                              </div>
-                              <span className="text-white font-medium text-sm leading-tight">{entry.teamName}</span>
-                            </div>
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "W"); }}
-                              className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
-                                isExpanded && expandedType === "W"
-                                  ? "text-[#e8193c]"
-                                  : "text-green-400 hover:text-green-300"
-                              }`}
-                            >
-                              {entry.wins}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "L"); }}
-                              className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
-                                isExpanded && expandedType === "L"
-                                  ? "text-[#e8193c]"
-                                  : "text-red-400 hover:text-red-300"
-                              }`}
-                            >
-                              {entry.losses}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "T"); }}
-                              className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
-                                isExpanded && expandedType === "T"
-                                  ? "text-[#e8193c]"
-                                  : "text-gray-400 hover:text-gray-200"
-                              }`}
-                            >
-                              {entry.ties}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2.5 text-center text-gray-300 tabular-nums">
-                            {entry.winPct.toFixed(1)}%
-                          </td>
-                        </tr>
-
-                        {showBreakdown && (
-                          <tr className="bg-[#0f1117]">
-                            <td colSpan={6} className="px-6 py-3">
-                              <div className="flex flex-col gap-1.5">
-                                <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">
-                                  {expandedType === "W" ? "Wins" : expandedType === "L" ? "Losses" : "Ties"} breakdown
-                                </p>
-                                {breakdownMatchups.length === 0 ? (
-                                  <p className="text-gray-600 text-xs">
-                                    No {expandedType === "W" ? "wins" : expandedType === "L" ? "losses" : "ties"}
-                                  </p>
-                                ) : (
-                                  breakdownMatchups.map((m) => (
-                                    <div key={m.opponentId} className="flex items-center gap-2 text-sm">
-                                      <div className="w-5 h-5 shrink-0">
-                                        {m.opponentLogo && (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img
-                                            src={m.opponentLogo}
-                                            alt=""
-                                            className="w-5 h-5 rounded-sm object-contain"
-                                            onError={(e) => { e.currentTarget.style.display = "none"; }}
-                                          />
-                                        )}
-                                      </div>
-                                      <span className="text-gray-300 min-w-0 flex-1">{m.opponentName}</span>
-                                      <span
-                                        className="ml-3 text-gray-500 tabular-nums shrink-0 cursor-default"
-                                        onMouseEnter={(e) => {
-                                          const rect = e.currentTarget.getBoundingClientRect();
-                                          const tooltipWidth = 248;
-                                          const left = Math.min(
-                                            Math.max(8, rect.left + rect.width / 2 - tooltipWidth / 2),
-                                            window.innerWidth - tooltipWidth - 8,
-                                          );
-                                          setHoveredMatchup({
-                                            teamId: entry.teamId,
-                                            opponentId: m.opponentId,
-                                            teamName: entry.teamName,
-                                            opponentName: m.opponentName,
-                                            anchorLeft: left,
-                                            anchorBottom: window.innerHeight - rect.top + 6,
-                                          });
-                                        }}
-                                        onMouseLeave={() => setHoveredMatchup(null)}
-                                      >
-                                        {m.teamCatWins}-{m.oppCatWins}-{m.pushes}
-                                      </span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
+                      <button
+                        key={n}
+                        onClick={() => { setStartPeriod(presetStart); setEndPeriod(lastEnd); }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                          active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                        }`}
+                      >
+                        Last {n}w
+                      </button>
                     );
                   })}
-                </tbody>
-              </table>
+                  <button
+                    onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                      startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
+                        ? "bg-[#e8193c] border-[#e8193c] text-white"
+                        : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                    }`}
+                  >
+                    Season
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 text-center">
+                  {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                </p>
+              </div>
+
+              {error && <ErrorBanner message={error} onRetry={handleCalculate} />}
+              {calculating && <div className="text-center py-8 text-gray-500 text-sm">Calculating…</div>}
+
+              {rankings && !calculating && (
+              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-gray-500 text-xs uppercase tracking-wider">
+                      <th className="px-2 py-2.5 text-left">#</th>
+                      <th className="px-2 py-2.5 text-left">Team</th>
+                      <th className="px-2 py-2.5 text-center">W</th>
+                      <th className="px-2 py-2.5 text-center">L</th>
+                      <th className="px-2 py-2.5 text-center">T</th>
+                      <th className="px-2 py-2.5 text-center">W%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankings.map((entry) => {
+                      const isExpanded = expandedTeamId === entry.teamId;
+                      const showBreakdown = isExpanded && expandedType !== null;
+                      const breakdownMatchups = expandedType
+                        ? entry.matchups.filter((m) => m.result === expandedType)
+                        : [];
+
+                      return (
+                        <Fragment key={entry.teamId}>
+                          <tr
+                            className="border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                            onClick={() => {
+                              setExpandedTeamId(null);
+                              setExpandedType(null);
+                            }}
+                          >
+                            <td className="px-2 py-2.5 text-gray-500 font-mono">{entry.rank}</td>
+                            <td className="px-2 py-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-6 h-6 shrink-0">
+                                  {entry.teamLogo && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={entry.teamLogo}
+                                      alt=""
+                                      className="w-6 h-6 rounded-sm object-contain"
+                                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                    />
+                                  )}
+                                </div>
+                                <span className="text-white font-medium text-sm leading-tight">{entry.teamName}</span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-2.5 text-center">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "W"); }}
+                                className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
+                                  isExpanded && expandedType === "W"
+                                    ? "text-[#e8193c]"
+                                    : "text-green-400 hover:text-green-300"
+                                }`}
+                              >
+                                {entry.wins}
+                              </button>
+                            </td>
+                            <td className="px-2 py-2.5 text-center">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "L"); }}
+                                className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
+                                  isExpanded && expandedType === "L"
+                                    ? "text-[#e8193c]"
+                                    : "text-red-400 hover:text-red-300"
+                                }`}
+                              >
+                                {entry.losses}
+                              </button>
+                            </td>
+                            <td className="px-2 py-2.5 text-center">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleExpandToggle(entry.teamId, "T"); }}
+                                className={`font-bold tabular-nums underline cursor-pointer transition-colors ${
+                                  isExpanded && expandedType === "T"
+                                    ? "text-[#e8193c]"
+                                    : "text-gray-400 hover:text-gray-200"
+                                }`}
+                              >
+                                {entry.ties}
+                              </button>
+                            </td>
+                            <td className="px-2 py-2.5 text-center text-gray-300 tabular-nums">
+                              {entry.winPct.toFixed(1)}%
+                            </td>
+                          </tr>
+
+                          {showBreakdown && (
+                            <tr className="bg-[#0f1117]">
+                              <td colSpan={6} className="px-6 py-3">
+                                <div className="flex flex-col gap-1.5">
+                                  <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">
+                                    {expandedType === "W" ? "Wins" : expandedType === "L" ? "Losses" : "Ties"} breakdown
+                                  </p>
+                                  {breakdownMatchups.length === 0 ? (
+                                    <p className="text-gray-600 text-xs">
+                                      No {expandedType === "W" ? "wins" : expandedType === "L" ? "losses" : "ties"}
+                                    </p>
+                                  ) : (
+                                    breakdownMatchups.map((m) => (
+                                      <div key={m.opponentId} className="flex items-center gap-2 text-sm">
+                                        <div className="w-5 h-5 shrink-0">
+                                          {m.opponentLogo && (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                              src={m.opponentLogo}
+                                              alt=""
+                                              className="w-5 h-5 rounded-sm object-contain"
+                                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                            />
+                                          )}
+                                        </div>
+                                        <span className="text-gray-300 min-w-0 flex-1">{m.opponentName}</span>
+                                        <span
+                                          className="ml-3 text-gray-500 tabular-nums shrink-0 cursor-default"
+                                          onMouseEnter={(e) => {
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const tooltipWidth = 248;
+                                            const left = Math.min(
+                                              Math.max(8, rect.left + rect.width / 2 - tooltipWidth / 2),
+                                              window.innerWidth - tooltipWidth - 8,
+                                            );
+                                            setHoveredMatchup({
+                                              teamId: entry.teamId,
+                                              opponentId: m.opponentId,
+                                              teamName: entry.teamName,
+                                              opponentName: m.opponentName,
+                                              anchorLeft: left,
+                                              anchorBottom: window.innerHeight - rect.top + 6,
+                                            });
+                                          }}
+                                          onMouseLeave={() => setHoveredMatchup(null)}
+                                        >
+                                          {m.teamCatWins}-{m.oppCatWins}-{m.pushes}
+                                        </span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              )}
             </div>
           )}
         </>

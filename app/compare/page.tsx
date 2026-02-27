@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useLeague } from "@/hooks/useLeague";
 import { calcTradeScore } from "@/lib/trade-score";
+import { scoringConfigLabel } from "@/lib/scoring-config";
 import { swidMatchesOwner } from "@/lib/swid-parser";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
-import type { AggregatedStats, CategoryResult } from "@/lib/types";
+import type { AggregatedStats, CategoryResult, LeagueScoringConfig } from "@/lib/types";
 import { TeamSelector } from "@/components/TeamSelector";
 import { WeekRangePicker } from "@/components/WeekRangePicker";
 import { CategoryTable } from "@/components/CategoryTable";
@@ -13,32 +14,21 @@ import { VerdictBanner } from "@/components/VerdictBanner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import Link from "next/link";
 
-// Per-team accumulator for summing raw stats across matchup weeks
-interface WeekAccum {
-  pts: number; reb: number; ast: number; stl: number; blk: number;
-  to: number; threepm: number; fgm: number; fga: number; ftm: number; fta: number;
-  weeks: number;
-}
+// Per-team accumulator: raw stat totals by ESPN stat ID.
+// Key -1 is reserved for the week count.
+const WEEKS_KEY = -1;
 
-const initAccum = (): WeekAccum => ({
-  pts: 0, reb: 0, ast: 0, stl: 0, blk: 0,
-  to: 0, threepm: 0, fgm: 0, fga: 0, ftm: 0, fta: 0,
-  weeks: 0,
-});
+type WeekAccum = Record<number, number>;
 
-function accumToStats(acc: WeekAccum): AggregatedStats {
-  const w = Math.max(acc.weeks, 1);
-  return {
-    PTS: acc.pts / w,
-    REB: acc.reb / w,
-    AST: acc.ast / w,
-    STL: acc.stl / w,
-    BLK: acc.blk / w,
-    TO:  acc.to  / w,
-    "3PM": acc.threepm / w,
-    "AFG%": acc.fga > 0 ? (acc.fgm + 0.5 * acc.threepm) / acc.fga : 0,
-    "FT%":  acc.fta > 0 ? acc.ftm / acc.fta : 0,
-  };
+const initAccum = (): WeekAccum => ({ [WEEKS_KEY]: 0 });
+
+function accumToStats(acc: WeekAccum, config: LeagueScoringConfig): AggregatedStats {
+  const weeks = Math.max(acc[WEEKS_KEY] ?? 0, 1);
+  const result: AggregatedStats = {};
+  for (const cat of config.cats) {
+    result[cat.id] = cat.compute(acc, weeks);
+  }
+  return result;
 }
 
 export default function ComparePage() {
@@ -54,6 +44,11 @@ export default function ComparePage() {
   const [comparing, setComparing] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
   const [results, setResults] = useState<CategoryResult[] | null>(null);
+  const [hasCompared, setHasCompared] = useState(false);
+
+  const autoCompare = useRef(false);
+  const shouldScrollRef = useRef(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLeagueId(localStorage.getItem("espn_leagueId") ?? "");
@@ -61,9 +56,8 @@ export default function ComparePage() {
     setSwid(localStorage.getItem("espn_swid") ?? "");
   }, []);
 
-  const { league, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid);
+  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid);
 
-  // Auto-detect your team + init week range
   useEffect(() => {
     if (!league || !swid) return;
     const match = league.teams.find((t) => swidMatchesOwner(swid, t.ownerId));
@@ -74,7 +68,19 @@ export default function ComparePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.leagueId]);
 
-  useEffect(() => { setResults(null); }, [teamAId, teamBId, startPeriod, endPeriod]);
+  useEffect(() => { setResults(null); }, [teamAId, teamBId]);
+
+  // Auto-compare on range change (only after first manual Compare press)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoCompare.current) handleCompare(); }, [startPeriod, endPeriod]);
+
+  // Scroll to results after a manual Compare press
+  useEffect(() => {
+    if (results !== null && shouldScrollRef.current) {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      shouldScrollRef.current = false;
+    }
+  }, [results]);
 
   const teamAName = useMemo(() => league?.teams.find((t) => t.id === teamAId)?.name ?? "Team A", [league, teamAId]);
   const teamBName = useMemo(() => league?.teams.find((t) => t.id === teamBId)?.name ?? "Team B", [league, teamBId]);
@@ -86,9 +92,9 @@ export default function ComparePage() {
     setComparing(true);
     setCompareError(null);
     setResults(null);
+    setHasCompared(true);
 
     try {
-      // One API call gets the full-season mMatchup schedule with per-category scoreByStat
       const ck = cacheKey("matchupv3", leagueId, String(league.scoringPeriodId));
       let data = cacheGet<Record<string, unknown>>(ck);
 
@@ -125,41 +131,34 @@ export default function ComparePage() {
             const sbs = cs?.scoreByStat as Record<string, { score: number }> | undefined;
             if (!sbs) continue;
 
-            const get = (id: number) => sbs[String(id)]?.score ?? 0;
             const acc = tid === teamAId ? accumA : accumB;
 
-            acc.pts     += get(0);
-            acc.blk     += get(1);
-            acc.stl     += get(2);
-            acc.ast     += get(3);
-            acc.reb     += get(6);
-            acc.to      += get(11);
-            acc.fgm     += get(13);
-            acc.fga     += get(14);
-            acc.ftm     += get(15);
-            acc.fta     += get(16);
-            acc.threepm += get(17);
-            acc.weeks++;
+            // Collect ALL stat IDs from scoreByStat — cat.compute picks what it needs
+            for (const [sidStr, entry] of Object.entries(sbs)) {
+              const sid = parseInt(sidStr, 10);
+              if (!isNaN(sid)) acc[sid] = (acc[sid] ?? 0) + entry.score;
+            }
+            acc[WEEKS_KEY]++;
           }
         }
       }
 
-      if (accumA.weeks === 0 && accumB.weeks === 0) {
+      if ((accumA[WEEKS_KEY] ?? 0) === 0 && (accumB[WEEKS_KEY] ?? 0) === 0) {
         throw new Error(
           "No matchup data found for the selected week range. " +
           "Future weeks or weeks beyond the schedule won't have stats yet."
         );
       }
 
-      const statsA = accumToStats(accumA);
-      const statsB = accumToStats(accumB);
-      setResults(calcTradeScore(statsA, statsB).results);
+      const statsA = accumToStats(accumA, scoringConfig);
+      const statsB = accumToStats(accumB, scoringConfig);
+      setResults(calcTradeScore(statsA, statsB, scoringConfig).results);
     } catch (err) {
       setCompareError((err as Error).message);
     } finally {
       setComparing(false);
     }
-  }, [teamAId, teamBId, leagueId, espnS2, swid, startPeriod, endPeriod, league]);
+  }, [teamAId, teamBId, leagueId, espnS2, swid, startPeriod, endPeriod, league, scoringConfig]);
 
   const noSettings = !leagueId || !espnS2 || !swid;
   const teamAWins = results?.filter((r) => r.winner === "giving").length ?? 0;
@@ -183,7 +182,6 @@ export default function ComparePage() {
       )}
 
       {leagueError && <div className="mb-6"><ErrorBanner message={leagueError} /></div>}
-      {compareError && <div className="mb-6"><ErrorBanner message={compareError} onRetry={handleCompare} /></div>}
       {leagueLoading && <div className="text-center py-8 text-gray-500 text-sm">Loading league…</div>}
 
       {league && !leagueLoading && (
@@ -214,7 +212,7 @@ export default function ComparePage() {
 
             <div className="mt-6 flex justify-end">
               <button
-                onClick={handleCompare}
+                onClick={() => { shouldScrollRef.current = true; autoCompare.current = true; handleCompare(); }}
                 disabled={!teamAId || !teamBId || comparing}
                 className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-8 py-2.5 rounded-lg transition-colors"
               >
@@ -223,20 +221,66 @@ export default function ComparePage() {
             </div>
           </div>
 
-          {results && (
-            <div className="flex flex-col gap-4">
-              <VerdictBanner
-                type="matchup"
-                teamAName={teamAName}
-                teamBName={teamBName}
-                teamAWins={teamAWins}
-                teamBWins={teamBWins}
-                teamALogo={teamALogo}
-                teamBLogo={teamBLogo}
-              />
-              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
-                <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
+          {hasCompared && (
+            <div ref={resultsRef} className="scroll-mt-14 flex flex-col gap-4">
+              {/* Quick week select — change range without scrolling back up */}
+              <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-4">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
+                  {[1, 2, 3, 4, 6, 8].map((n) => {
+                    const lastEnd = Math.max(1, league.scoringPeriodId - 1);
+                    const presetStart = Math.max(1, lastEnd - n + 1);
+                    const active = startPeriod === presetStart && endPeriod === lastEnd;
+                    return (
+                      <button
+                        key={n}
+                        onClick={() => { setStartPeriod(presetStart); setEndPeriod(lastEnd); }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                          active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                        }`}
+                      >
+                        Last {n}w
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                      startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
+                        ? "bg-[#e8193c] border-[#e8193c] text-white"
+                        : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                    }`}
+                  >
+                    Season
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600">
+                  {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                </p>
               </div>
+
+              {compareError && <ErrorBanner message={compareError} onRetry={handleCompare} />}
+              {comparing && <div className="text-center py-8 text-gray-500 text-sm">Loading…</div>}
+
+              {results && !comparing && (
+                <>
+                  <VerdictBanner
+                    type="matchup"
+                    teamAName={teamAName}
+                    teamBName={teamBName}
+                    teamAWins={teamAWins}
+                    teamBWins={teamBWins}
+                    teamALogo={teamALogo}
+                    teamBLogo={teamBLogo}
+                  />
+                  <p className="text-center text-xs text-gray-600">
+                    {scoringConfigLabel(scoringConfig)}
+                  </p>
+                  <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
+                    <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
+                  </div>
+                </>
+              )}
             </div>
           )}
         </>

@@ -89,6 +89,9 @@ function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): 
     fta: get(STAT_IDS.FTA),
     threepa: get(STAT_IDS["3PA"]),
     gp,
+    // Full ESPN stats dict — all stat IDs available for dynamic league support.
+    // Keys are numeric stat IDs (accessed as rawStats[0], rawStats[13], etc.)
+    rawStats: raw as unknown as Record<number, number>,
   };
 }
 
@@ -100,7 +103,7 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
   const load = useCallback(() => {
     if (!leagueId || !espnS2 || !swid) return;
 
-    const key = cacheKey("players_v3", leagueId, window);
+    const key = cacheKey("players_v4", leagueId, window);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);

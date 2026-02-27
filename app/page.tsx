@@ -5,7 +5,7 @@ const OPTIONS = [
     href: "/trade",
     emoji: "🔄",
     title: "Trade Analyzer",
-    description: "Compare two sets of players and see who wins each of the 9 categories.",
+    description: "Compare two sets of players across your league's scoring categories.",
   },
   {
     href: "/compare",

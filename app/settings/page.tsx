@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { saveSettings } from "@/lib/espn-client";
 import { clearCache } from "@/lib/espn-cache";
+import { useLeague } from "@/hooks/useLeague";
+import { scoringConfigLabel } from "@/lib/scoring-config";
 
 export default function SettingsPage() {
   const [leagueId, setLeagueId] = useState("");
@@ -67,6 +69,8 @@ export default function SettingsPage() {
     bookmarkRef.current.href = code;
   }, []);
 
+  const { league, scoringConfig } = useLeague(leagueId, espnS2, swid);
+
   function handleSave() {
     saveSettings(leagueId.trim(), espnS2.trim(), swid.trim());
     clearCache(leagueId.trim());
@@ -83,6 +87,19 @@ export default function SettingsPage() {
       <p className="text-gray-500 text-sm mb-8">
         Connect to your ESPN Fantasy Basketball league. Credentials are stored only in your browser.
       </p>
+
+      {/* League loaded banner */}
+      {league && (
+        <div className="mb-6 bg-green-500/10 border border-green-500/25 rounded-lg p-4 text-sm space-y-1">
+          <p className="font-semibold text-white flex items-center gap-2">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 text-green-400 text-xs font-bold shrink-0">✓</span>
+            Your league loaded successfully.
+          </p>
+          <p className="text-gray-500 pl-7">The league format is</p>
+          <p className="font-mono text-gray-200 pl-7">{scoringConfigLabel(scoringConfig)}</p>
+          <p className="text-gray-600 pl-7 text-xs pt-1">Changed your ESPN league settings? Click Save Settings again to refresh.</p>
+        </div>
+      )}
 
       {/* Auto-detect result banner */}
       {allAutoDetected && (
@@ -176,13 +193,15 @@ export default function SettingsPage() {
             mono
           />
 
-          <button
-            onClick={handleSave}
-            disabled={!leagueId || !espnS2 || !swid}
-            className="mt-1 bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
-          >
-            {saved ? "Saved ✓" : "Save Settings"}
-          </button>
+          <div className="flex justify-center mt-1">
+            <button
+              onClick={handleSave}
+              disabled={!leagueId || !espnS2 || !swid}
+              className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-8 rounded-lg transition-colors"
+            >
+              {saved ? "Saved ✓" : "Save Settings"}
+            </button>
+          </div>
         </div>
       </div>
 

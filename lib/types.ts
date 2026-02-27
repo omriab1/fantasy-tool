@@ -15,11 +15,42 @@ export const STAT_IDS = {
   GP: 42,
 } as const;
 
+// Legacy constant — actual categories are now driven by LeagueScoringConfig
 export const CATEGORIES = ["AFG%", "FT%", "3PM", "REB", "AST", "STL", "BLK", "TO", "PTS"] as const;
 export type Category = (typeof CATEGORIES)[number];
+export const LOWER_IS_BETTER: readonly string[] = ["TO"];
 
-// Lower is better for TO
-export const LOWER_IS_BETTER: Category[] = ["TO"];
+// ─── Scoring config types ─────────────────────────────────────────────────────
+
+export interface ScoringCat {
+  /** Display label shown in tables and subtitles, e.g. "PTS", "FG%", "AFG%" */
+  id: string;
+  /** ESPN stat ID used to look up this category in scoringItems */
+  espnStatId: number;
+  lowerIsBetter: boolean;
+  /**
+   * Compute the final category value from raw stat totals.
+   * @param totals  Raw ESPN stat totals keyed by stat ID (summed across players or weeks)
+   * @param gp      Total games played (sum across players) or number of weeks
+   */
+  compute: (totals: Record<number, number>, gp: number) => number;
+  /**
+   * For simple percentage stats (FG%, FT%, 3P%): the [made, attempts] stat IDs.
+   * Used to show volume (e.g. "180/240") below the percentage in category tables.
+   * Not set for weighted metrics like AFG% where the numerator isn't a single stat.
+   */
+  volumeStatIds?: readonly [number, number];
+}
+
+export interface LeagueScoringConfig {
+  format: "categories" | "points" | "roto";
+  /** Ordered list of scoring categories for display and comparison */
+  cats: ScoringCat[];
+  /** statId → points per unit (points leagues only) */
+  pointValues?: Record<number, number>;
+}
+
+// ─── Player / Stats types ─────────────────────────────────────────────────────
 
 export interface RawStats {
   [statId: number]: number;
@@ -30,6 +61,7 @@ export interface PlayerStats {
   playerName: string;
   teamAbbrev: string;
   position: string;
+  // Named fields kept for backwards compatibility
   pts: number;
   reb: number;
   ast: number;
@@ -43,26 +75,25 @@ export interface PlayerStats {
   fta: number;
   threepa: number;
   gp: number;
+  /** Full ESPN stats dict — every stat ID available for dynamic league support */
+  rawStats: Record<number, number>;
 }
 
-export interface AggregatedStats {
-  PTS: number;
-  REB: number;
-  AST: number;
-  STL: number;
-  BLK: number;
-  TO: number;
-  "3PM": number;
-  "AFG%": number;
-  "FT%": number;
-}
+/** Dynamic stats map: category label → computed value */
+export type AggregatedStats = Record<string, number>;
 
 export interface CategoryResult {
-  category: Category;
+  /** Category display label, e.g. "PTS", "FG%", "AFG%" */
+  category: string;
   giving: number;
   receiving: number;
   delta: number;
   winner: "receiving" | "giving" | "push";
+  lowerIsBetter: boolean;
+  /** Raw [made, attempts] volume for the giving side — set for FG%, FT%, 3P% */
+  givingVol?: readonly [number, number];
+  /** Raw [made, attempts] volume for the receiving side — set for FG%, FT%, 3P% */
+  receivingVol?: readonly [number, number];
 }
 
 export interface TradeAnalysis {

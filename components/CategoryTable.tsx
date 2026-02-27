@@ -1,4 +1,3 @@
-import { LOWER_IS_BETTER } from "@/lib/types";
 import type { CategoryResult } from "@/lib/types";
 import { fmt } from "@/lib/stat-calculator";
 
@@ -40,7 +39,6 @@ export function CategoryTable(props: Props) {
               : isLoss
               ? "bg-red-500/10 border-l-2 border-l-red-500"
               : "";
-            const lowerBetter = LOWER_IS_BETTER.includes(r.category as typeof LOWER_IS_BETTER[number]);
             const deltaColor = isWin ? "text-green-400" : isLoss ? "text-red-400" : "text-gray-500";
             const deltaSign = r.delta > 0 ? "+" : "";
 
@@ -48,13 +46,23 @@ export function CategoryTable(props: Props) {
               <tr key={r.category} className={`border-b border-white/5 ${rowColor}`}>
                 <td className="py-2 px-2 text-center font-medium text-white">
                   {r.category}
-                  {lowerBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
+                  {r.lowerIsBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
                 </td>
                 <td className={`py-2 px-2 text-center font-mono ${isLoss ? "text-white font-bold" : "text-gray-400"}`}>
                   {fmt(r.giving, r.category)}
+                  {r.givingVol && (
+                    <div className="text-xs text-gray-600 font-normal leading-none mt-0.5">
+                      {r.givingVol[0].toFixed(1)}/{r.givingVol[1].toFixed(1)}
+                    </div>
+                  )}
                 </td>
                 <td className={`py-2 px-2 text-center font-mono ${isWin ? "text-white font-bold" : "text-gray-400"}`}>
                   {fmt(r.receiving, r.category)}
+                  {r.receivingVol && (
+                    <div className="text-xs text-gray-600 font-normal leading-none mt-0.5">
+                      {r.receivingVol[0].toFixed(1)}/{r.receivingVol[1].toFixed(1)}
+                    </div>
+                  )}
                 </td>
                 <td className={`py-2 px-2 text-center font-mono font-semibold whitespace-nowrap ${deltaColor}`}>
                   {r.winner !== "push" && fmt(r.giving, r.category) === fmt(r.receiving, r.category)
@@ -94,7 +102,6 @@ export function CategoryTable(props: Props) {
         </thead>
         <tbody>
           {results.map((r) => {
-            // In matchup mode: giving = Team A, receiving = Team B
             const teamAWins = r.winner === "giving";
             const teamBWins = r.winner === "receiving";
             const rowColor = teamAWins
@@ -102,7 +109,6 @@ export function CategoryTable(props: Props) {
               : teamBWins
               ? "bg-red-500/10 border-l-2 border-l-red-500"
               : "";
-            const lowerBetter = LOWER_IS_BETTER.includes(r.category as typeof LOWER_IS_BETTER[number]);
             const deltaColor = teamAWins
               ? "text-green-400"
               : teamBWins
@@ -120,7 +126,7 @@ export function CategoryTable(props: Props) {
                 </td>
                 <td className="py-2.5 px-2 text-center font-medium text-white">
                   {r.category}
-                  {lowerBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
+                  {r.lowerIsBetter && <span className="text-gray-600 text-xs ml-1">↓</span>}
                 </td>
                 <td className={`py-2.5 px-2 text-center font-mono ${teamBWins ? "text-white font-semibold" : "text-gray-400"}`}>
                   {fmt(r.receiving, r.category)}
