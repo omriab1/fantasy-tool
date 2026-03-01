@@ -6,7 +6,7 @@ import { clearCache } from "@/lib/espn-cache";
 import { useLeague } from "@/hooks/useLeague";
 import { scoringConfigLabel } from "@/lib/scoring-config";
 import { SPORT_CONFIGS } from "@/lib/sports-config";
-import type { EspnSport } from "@/lib/types";
+import type { EspnSport, SavedLeague } from "@/lib/types";
 
 type ConnectedInfo = { label: string; emoji: string; name: string };
 
@@ -23,6 +23,42 @@ const SPORT_URL_HINTS: Record<EspnSport, string> = {
 const ACTIVE_SPORTS: EspnSport[] = ["fba", "wnba"];
 const COMING_SOON_SPORTS: EspnSport[] = ["flb", "fhl", "ffl"];
 
+// ── Multi-league helpers (module-level, no React deps) ─────────────────────
+
+/** Load saved leagues for a sport, with one-time migration from single-key storage. */
+function loadSavedLeagues(s: EspnSport): SavedLeague[] {
+  try {
+    const raw = localStorage.getItem(`espn_leagues_${s}`);
+    if (raw) return JSON.parse(raw) as SavedLeague[];
+  } catch { /* ignore */ }
+  // Migrate from legacy single espn_leagueId_{sport} key
+  const single = localStorage.getItem(`espn_leagueId_${s}`)
+    ?? (s === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "");
+  if (single) {
+    const arr: SavedLeague[] = [{ id: single }];
+    localStorage.setItem(`espn_leagues_${s}`, JSON.stringify(arr));
+    return arr;
+  }
+  return [];
+}
+
+/** Persist a leagues array for a sport. */
+function persistLeagues(s: EspnSport, arr: SavedLeague[]) {
+  localStorage.setItem(`espn_leagues_${s}`, JSON.stringify(arr));
+}
+
+/** Append a leagueId to a sport's leagues array (dedup). Returns the updated array. */
+function appendLeague(s: EspnSport, id: string): SavedLeague[] {
+  const arr = loadSavedLeagues(s);
+  if (!arr.find(l => l.id === id)) {
+    arr.push({ id });
+    persistLeagues(s, arr);
+  }
+  return arr;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const [sport, setSport] = useState<EspnSport>("fba");
   const [leagueId, setLeagueId] = useState("");
@@ -35,18 +71,23 @@ export default function SettingsPage() {
   // Persisted league info — loaded immediately from localStorage so the banner
   // shows on return visits before the league state has loaded from cache.
   const [savedConnectedInfo, setSavedConnectedInfo] = useState<ConnectedInfo | null>(null);
+  // Multi-league state
+  const [savedLeagues, setSavedLeagues] = useState<SavedLeague[]>([]);
+  const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const bookmarkRef = useRef<HTMLAnchorElement>(null);
+  const leagueDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
     if (params.get("auto") === "1") {
       // Bookmarklet redirect — merge detected values with any existing saved values.
-      // Use sport from URL param if present, otherwise use currently saved sport.
-      const paramS2     = params.get("s2") ?? "";
-      const paramSwid   = params.get("swid") ?? "";
-      const paramLid    = params.get("leagueId") ?? "";
-      const paramSport  = (params.get("sport") as EspnSport | null) ?? null;
+      const paramS2    = params.get("s2") ?? "";
+      const paramSwid  = params.get("swid") ?? "";
+      const paramLid   = params.get("leagueId") ?? "";
+      const paramSport = (params.get("sport") as EspnSport | null) ?? null;
 
       const activeSport = (paramSport && paramSport in SPORT_CONFIGS)
         ? paramSport
@@ -67,17 +108,36 @@ export default function SettingsPage() {
         localStorage.setItem(`espn_leagueId_${activeSport}`, lid);
         localStorage.setItem("espn_s2", s2);
         localStorage.setItem("espn_swid", swidVal);
+        // Append-with-dedup to active sport's leagues array
+        appendLeague(activeSport, lid);
         clearCache(lid);
         setSaved(true);
       }
 
-      // Save league IDs for any other sports included in the transfer link (lid_{sport} params)
+      // Old lid_{sport} params (backwards compat — single league per sport)
       for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
         const extraLid = params.get(`lid_${s}`);
         if (extraLid && s !== activeSport) {
           localStorage.setItem(`espn_leagueId_${s}`, extraLid);
+          appendLeague(s, extraLid);
         }
       }
+
+      // New lids_{sport} comma-separated params (multi-league transfer)
+      for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
+        const raw = params.get(`lids_${s}`);
+        if (!raw) continue;
+        const incoming = raw.split(",").filter(Boolean);
+        if (incoming.length === 0) continue;
+        // Set active league ID for this sport if not already set
+        if (!localStorage.getItem(`espn_leagueId_${s}`)) {
+          localStorage.setItem(`espn_leagueId_${s}`, incoming[0]);
+        }
+        for (const id of incoming) appendLeague(s, id);
+      }
+
+      // Load leagues state for the active sport after all localStorage updates
+      setSavedLeagues(loadSavedLeagues(activeSport));
 
       // Clean the URL so refreshing doesn't re-trigger
       window.history.replaceState({}, "", "/settings");
@@ -90,6 +150,7 @@ export default function SettingsPage() {
       setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setSavedLeagues(loadSavedLeagues(validSport));
     }
   }, []);
 
@@ -100,6 +161,9 @@ export default function SettingsPage() {
     const savedLid = localStorage.getItem(`espn_leagueId_${newSport}`) ?? "";
     setLeagueId(savedLid);
     setSaved(false);
+    setSavedLeagues(loadSavedLeagues(newSport));
+    setEditingLeagueId(null);
+    setDropdownOpen(false);
     // Persist sport immediately so NavTabs reflects the change without requiring Save
     localStorage.setItem("espn_sport", newSport);
     window.dispatchEvent(new Event("espn-settings-changed"));
@@ -130,11 +194,22 @@ export default function SettingsPage() {
     bookmarkRef.current.href = code;
   }, []);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (leagueDropdownRef.current && !leagueDropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
+
   const { league, scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
   const sportCfg = SPORT_CONFIGS[sport];
 
   // Load persisted connected info for the current sport immediately on mount / sport change.
-  // This ensures the banner shows right away on return visits before league state loads from cache.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`espn_last_connected_${sport}`);
@@ -168,9 +243,34 @@ export default function SettingsPage() {
     localStorage.setItem(`espn_leagueId_${sport}`, lid);
     localStorage.setItem("espn_s2", s2);
     localStorage.setItem("espn_swid", sw);
+    // Add to leagues array (dedup)
+    setSavedLeagues(prev => {
+      if (prev.find(l => l.id === lid)) return prev;
+      const updated = [...prev, { id: lid }];
+      persistLeagues(sport, updated);
+      return updated;
+    });
     window.dispatchEvent(new Event("espn-settings-changed"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.leagueId]);
+
+  // Auto-detect team name via SWID matching when league loads
+  useEffect(() => {
+    if (!league || !swid || !leagueId) return;
+    const swidNorm = swid.toLowerCase();
+    const myTeam = league.teams.find(t => t.ownerId === swidNorm);
+    if (!myTeam) return;
+    setSavedLeagues(prev => {
+      const idx = prev.findIndex(l => l.id === leagueId);
+      if (idx < 0) return prev;
+      if (prev[idx].teamName === myTeam.name) return prev;
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], teamName: myTeam.name, teamId: myTeam.id };
+      persistLeagues(sport, updated);
+      return updated;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.leagueId, swid]);
 
   function handleSave() {
     const lid = leagueId.trim();
@@ -180,23 +280,82 @@ export default function SettingsPage() {
     localStorage.setItem(`espn_leagueId_${sport}`, lid);
     localStorage.setItem("espn_s2", s2);
     localStorage.setItem("espn_swid", sw);
+    // Append-with-dedup to leagues array
+    setSavedLeagues(prev => {
+      if (prev.find(l => l.id === lid)) return prev;
+      const updated = [...prev, { id: lid }];
+      persistLeagues(sport, updated);
+      return updated;
+    });
     clearCache(lid);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
 
-  // Build a transfer URL that includes league IDs for ALL saved sports, not just the current one.
-  // This lets a QR scan or copy-link transfer set up every sport at once on the target device.
+  function activateLeague(id: string) {
+    setLeagueId(id);
+    localStorage.setItem(`espn_leagueId_${sport}`, id);
+    window.dispatchEvent(new Event("espn-settings-changed"));
+  }
+
+  function removeLeague(id: string) {
+    setSavedLeagues(prev => {
+      const arr = prev.filter(l => l.id !== id);
+      persistLeagues(sport, arr);
+      if (id === leagueId) {
+        if (arr.length > 0) {
+          // Auto-activate the first remaining league
+          setLeagueId(arr[0].id);
+          localStorage.setItem(`espn_leagueId_${sport}`, arr[0].id);
+        } else {
+          setLeagueId("");
+          localStorage.removeItem(`espn_leagueId_${sport}`);
+        }
+        window.dispatchEvent(new Event("espn-settings-changed"));
+      }
+      return arr;
+    });
+  }
+
+  function saveLeagueLabel(id: string) {
+    setSavedLeagues(prev => {
+      const updated = prev.map(l => {
+        if (l.id !== id) return l;
+        const trimmed = editingLabel.trim();
+        if (!trimmed) {
+          // Remove custom label — teamName auto-displays
+          return { id: l.id, teamName: l.teamName, teamId: l.teamId };
+        }
+        return { ...l, label: trimmed };
+      });
+      persistLeagues(sport, updated);
+      return updated;
+    });
+    setEditingLeagueId(null);
+  }
+
+  // Build a transfer URL that includes all saved leagues for all sports.
   function buildTransferUrl() {
     let url = `${window.location.origin}/settings?auto=1`
       + `&leagueId=${encodeURIComponent(leagueId)}`
       + `&s2=${encodeURIComponent(espnS2)}`
       + `&swid=${encodeURIComponent(swid)}`
       + `&sport=${encodeURIComponent(sport)}`;
+
+    // Extra leagues for current sport (non-active ones)
+    const extraCurrent = savedLeagues.filter(l => l.id !== leagueId).map(l => l.id);
+    if (extraCurrent.length > 0) {
+      url += `&lids_${sport}=${encodeURIComponent(extraCurrent.join(","))}`;
+    }
+
+    // All leagues for other sports
     for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
       if (s === sport) continue;
-      const saved = localStorage.getItem(`espn_leagueId_${s}`);
-      if (saved) url += `&lid_${s}=${encodeURIComponent(saved)}`;
+      const arr = loadSavedLeagues(s);
+      const allIds = arr.map(l => l.id);
+      if (allIds.length > 0) {
+        url += `&lids_${s}=${encodeURIComponent(allIds.join(","))}`;
+      }
     }
     return url;
   }
@@ -356,6 +515,107 @@ export default function SettingsPage() {
               })}
             </div>
           </div>
+
+          {/* League dropdown — shown when ≥1 league saved for current sport */}
+          {savedLeagues.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-white">
+                Your {sportCfg.name} Leagues
+              </label>
+              <p className="text-xs text-gray-500">
+                You can load more than one {sportCfg.name} league. If you use Quick Connect, the new league will be added automatically after the ones already loaded.
+              </p>
+              <div className="relative" ref={leagueDropdownRef}>
+                {/* Trigger button */}
+                <button
+                  onClick={() => setDropdownOpen(o => !o)}
+                  className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm border border-white/10 bg-[#0f1117] text-white hover:border-white/20 transition-colors"
+                >
+                  <span className="truncate">
+                    {(() => {
+                      const active = savedLeagues.find(l => l.id === leagueId);
+                      return active
+                        ? (active.label ?? active.teamName ?? `#${active.id}`)
+                        : "Select a league…";
+                    })()}
+                  </span>
+                  <span className={`ml-2 text-gray-500 shrink-0 text-xs transition-transform ${dropdownOpen ? "rotate-180" : ""}`}>▾</span>
+                </button>
+
+                {/* Dropdown list */}
+                {dropdownOpen && (
+                  <div className="absolute z-20 top-full mt-1 left-0 right-0 bg-[#131720] border border-white/15 rounded-lg shadow-xl overflow-hidden">
+                    {savedLeagues.map((l) => {
+                      const isActive = l.id === leagueId;
+                      const isEditing = editingLeagueId === l.id;
+                      const displayLabel = l.label ?? l.teamName ?? `#${l.id}`;
+                      return (
+                        <div
+                          key={l.id}
+                          className={`flex items-center gap-2 px-3 py-2.5 transition-colors ${
+                            isActive ? "bg-[#e8193c]/10" : "hover:bg-white/5"
+                          }`}
+                        >
+                          {/* Active indicator */}
+                          <span className={`shrink-0 text-xs ${isActive ? "text-green-400" : "text-transparent"}`}>✓</span>
+
+                          {/* Label / inline edit */}
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editingLabel}
+                              onChange={(e) => setEditingLabel(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveLeagueLabel(l.id);
+                                if (e.key === "Escape") setEditingLeagueId(null);
+                              }}
+                              onBlur={() => saveLeagueLabel(l.id)}
+                              className="flex-1 bg-transparent border-none outline-none text-white text-sm min-w-0"
+                              placeholder={`#${l.id}`}
+                            />
+                          ) : (
+                            <button
+                              onClick={() => { activateLeague(l.id); setDropdownOpen(false); }}
+                              className={`flex-1 text-left text-sm truncate ${isActive ? "text-white" : "text-gray-300"}`}
+                            >
+                              {displayLabel}
+                            </button>
+                          )}
+
+                          {/* Pencil */}
+                          <button
+                            onClick={() => { setEditingLeagueId(l.id); setEditingLabel(l.label ?? l.teamName ?? ""); }}
+                            title="Rename"
+                            className="text-gray-600 hover:text-gray-300 transition-colors shrink-0"
+                          >
+                            ✎
+                          </button>
+
+                          {/* Remove */}
+                          <button
+                            onClick={() => removeLeague(l.id)}
+                            title="Remove league"
+                            className="text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Add League */}
+                    <button
+                      onClick={() => { setLeagueId(""); setSaved(false); setEditingLeagueId(null); setDropdownOpen(false); }}
+                      className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-colors border-t border-white/8"
+                    >
+                      <span className="text-xs">+</span> Add League
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <Field
             label="League ID"
