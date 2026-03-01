@@ -155,6 +155,14 @@ export interface PowerRankEntry {
 
 export type EspnSport = "fba" | "wnba" | "flb" | "fhl" | "ffl";
 
+export interface SavedLeague {
+  id: string;
+  teamName?: string;
+  teamId?: number;
+  /** User-set custom display name; overrides teamName in UI */
+  label?: string;
+}
+
 export type StatsWindow = "season" | "30" | "15" | "7" | "proj";
 
 export interface EspnPlayerInfo {
