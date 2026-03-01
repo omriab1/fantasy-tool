@@ -111,8 +111,7 @@ export default function SettingsPage() {
       `var sw=c['SWID']||'';` +
       `var m=location.href.match(/[?&]leagueId=(\\d+)/);` +
       `var lid=m?m[1]:'';` +
-      `var sp=localStorage.getItem('espn_sport')||'fba';` +
-      `location.href='${origin}/settings?auto=1&leagueId='+encodeURIComponent(lid)+'&s2='+encodeURIComponent(s2)+'&swid='+encodeURIComponent(sw)+'&sport='+encodeURIComponent(sp);` +
+      `location.href='${origin}/settings?auto=1&leagueId='+encodeURIComponent(lid)+'&s2='+encodeURIComponent(s2)+'&swid='+encodeURIComponent(sw);` +
     `})();`;
     bookmarkRef.current.href = code;
   }, []);
