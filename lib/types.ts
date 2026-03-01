@@ -153,7 +153,9 @@ export interface PowerRankEntry {
   matchups: PowerMatchup[];
 }
 
-export type StatsWindow = "season" | "30" | "15" | "7";
+export type EspnSport = "fba" | "wnba" | "flb" | "fhl" | "ffl";
+
+export type StatsWindow = "season" | "30" | "15" | "7" | "proj";
 
 export interface EspnPlayerInfo {
   playerId: number;

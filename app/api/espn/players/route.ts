@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/2026/segments/0/leagues";
-
-// ESPN stat window filter headers
-const WINDOW_FILTERS: Record<string, object> = {
-  season: {
-    filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: ["002026", "102026", "002025"] },
-  },
-  "30": { filterStatsForTopScoringPeriodIds: { value: 30 } },
-  "15": { filterStatsForTopScoringPeriodIds: { value: 15 } },
-  "7": { filterStatsForTopScoringPeriodIds: { value: 7 } },
-};
+import { SPORT_CONFIGS, apiBase, apiSegment } from "@/lib/sports-config";
+import type { EspnSport } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const leagueId = searchParams.get("leagueId");
   const window = searchParams.get("window") ?? "season";
+  const sport = (searchParams.get("sport") ?? "fba") as EspnSport;
+  const cfg = SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba;
   const espnS2 = req.headers.get("x-espn-s2") ?? "";
   const swid = req.headers.get("x-espn-swid") ?? "";
 
@@ -23,11 +15,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing leagueId" }, { status: 400 });
   }
 
+  // ESPN stat window filter headers.
+  // The season filter's additionalValue uses ESPN season-code format: "00{year}" and "10{year}".
+  // statsFallbackYear: for sports in off-season (e.g. WNBA), stats live under the prior year.
+  const y = cfg.seasonYear;
+  const statsY = cfg.statsFallbackYear ?? y;
+  const WINDOW_FILTERS: Record<string, object> = {
+    season: {
+      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`00${statsY}`, `10${statsY}`, `00${statsY - 1}`] },
+    },
+    "30": { filterStatsForTopScoringPeriodIds: { value: 30 } },
+    "15": { filterStatsForTopScoringPeriodIds: { value: 15 } },
+    "7": { filterStatsForTopScoringPeriodIds: { value: 7 } },
+    // Projections: statSourceId=1 entries — "10{year}" is the ESPN projection season code
+    proj: {
+      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`10${statsY}`, `00${statsY}`] },
+    },
+  };
+
   const filter = WINDOW_FILTERS[window] ?? WINDOW_FILTERS["season"];
   const filterHeader = JSON.stringify({ players: filter });
 
-  // Fetch up to 1500 players (typical league max ~600 relevant)
-  const url = `${ESPN_BASE}/${leagueId}/players?scoringPeriodId=0&view=kona_player_info`;
+  const base = `${apiBase(cfg)}/games/${apiSegment(cfg)}/seasons/${cfg.seasonYear}/segments/0/leagues`;
+  const url = `${base}/${leagueId}/players?scoringPeriodId=0&view=kona_player_info`;
 
   try {
     const res = await fetch(url, {

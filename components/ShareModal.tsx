@@ -11,6 +11,7 @@ interface ShareModalProps {
   receivingPlayers: PlayerStats[];
   analysis: TradeAnalysis;
   scoringConfig: LeagueScoringConfig;
+  sportEmoji?: string;
 }
 
 // Preview card base width. Modal is 520px max; with 20px padding each side
@@ -28,6 +29,7 @@ export function ShareModal({
   receivingPlayers,
   analysis,
   scoringConfig,
+  sportEmoji = "🏀",
 }: ShareModalProps) {
   const [flipped, setFlipped] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "copying" | "sharing">("idle");
@@ -172,7 +174,7 @@ export function ShareModal({
     transition: "opacity 0.15s",
   };
 
-  const cardProps = { givingPlayers, receivingPlayers, analysis, scoringConfig, flipped };
+  const cardProps = { givingPlayers, receivingPlayers, analysis, scoringConfig, flipped, sportEmoji };
 
   return (
     <>

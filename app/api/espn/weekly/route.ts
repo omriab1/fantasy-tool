@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/2026/segments/0/leagues";
+import { SPORT_CONFIGS, apiBase, apiSegment } from "@/lib/sports-config";
+import type { EspnSport } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const leagueId = searchParams.get("leagueId");
   const period = searchParams.get("period");
+  const sport = (searchParams.get("sport") ?? "fba") as EspnSport;
+  const cfg = SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba;
   const espnS2 = req.headers.get("x-espn-s2") ?? "";
   const swid = req.headers.get("x-espn-swid") ?? "";
 
@@ -15,7 +17,8 @@ export async function GET(req: NextRequest) {
 
   // mMatchup view returns full-season schedule with per-category scoreByStat for every team.
   // One call gets all historical matchup weeks — no need for one call per week.
-  const url = `${ESPN_BASE}/${leagueId}?scoringPeriodId=${period}&view=mMatchup`;
+  const base = `${apiBase(cfg)}/games/${apiSegment(cfg)}/seasons/${cfg.seasonYear}/segments/0/leagues`;
+  const url = `${base}/${leagueId}?scoringPeriodId=${period}&view=mMatchup`;
 
   try {
     const res = await fetch(url, {

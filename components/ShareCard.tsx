@@ -13,13 +13,15 @@ export interface ShareCardProps {
   flipped: boolean;
   /** Card width in px — all internal sizes scale proportionally. Default 480. */
   cardWidth?: number;
+  /** Sport emoji shown in the card header. Default 🏀. */
+  sportEmoji?: string;
 }
 
 // Base design is 480px wide. All sizes below are at base=480.
 const BASE = 480;
 
 export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
-  ({ givingPlayers, receivingPlayers, analysis, scoringConfig, flipped, cardWidth = BASE }, ref) => {
+  ({ givingPlayers, receivingPlayers, analysis, scoringConfig, flipped, cardWidth = BASE, sportEmoji = "🏀" }, ref) => {
     const s = cardWidth / BASE;
     const sc = (n: number) => Math.round(n * s); // scaled px value
 
@@ -84,7 +86,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             gap: sc(12),
           }}
         >
-          <span style={{ fontSize: sc(26) }}>🏀</span>
+          <span style={{ fontSize: sc(26) }}>{sportEmoji}</span>
           <div>
             <div
               style={{

@@ -2,42 +2,41 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
-import type { PlayerStats, StatsWindow } from "@/lib/types";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
+import type { PlayerStats, StatsWindow, EspnSport } from "@/lib/types";
 import { STAT_IDS } from "@/lib/types";
 
-// ESPN eligibleSlots 0-4 are the real position slots
-const SLOT_POS: Record<number, string> = {
-  0: "PG", 1: "SG", 2: "SF", 3: "PF", 4: "C",
-};
-
-// Fallback for defaultPositionId
-const POS_MAP: Record<number, string> = {
-  1: "PG", 2: "SG", 3: "SF", 4: "PF", 5: "C",
-  6: "PG/SG", 7: "SG/SF", 8: "SF/PF", 9: "PF/C",
-};
-
-// Map our window key to ESPN statSplitTypeId (all use statSourceId=0, seasonId=2026)
+// Map our window key to ESPN statSplitTypeId
+// statSourceId: 0 = actual stats, 1 = projections (proj window)
 const SPLIT_TYPE: Record<StatsWindow, number> = {
   season: 0,
   "30": 3,
   "15": 2,
   "7": 1,
+  proj: 0,  // projections use split type 0 (full-season), but statSourceId 1
 };
 
-function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): PlayerStats | null {
+function parsePlayerEntry(
+  entry: Record<string, unknown>,
+  window: StatsWindow,
+  seasonYear: number,
+  slotPosMap: Record<number, string>,
+  defaultPosMap: Record<number, string>,
+): PlayerStats | null {
   // Structure: { id, player: { fullName, defaultPositionId, proTeamId, stats: [...] } }
   const info = entry.player as Record<string, unknown> | undefined;
   if (!info) return null;
 
   const statsArr = (info.stats ?? []) as unknown[];
   const targetSplit = SPLIT_TYPE[window];
+  const isProj = window === "proj";
 
   let statsEntry: Record<string, unknown> | null = null;
   for (const s of statsArr) {
     const stat = s as Record<string, unknown>;
     if (
-      stat.seasonId === 2026 &&
-      stat.statSourceId === 0 &&
+      stat.seasonId === seasonYear &&
+      stat.statSourceId === (isProj ? 1 : 0) &&
       stat.statSplitTypeId === targetSplit
     ) {
       statsEntry = stat;
@@ -57,15 +56,15 @@ function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): 
   const posId = (info.defaultPositionId as number) ?? 9;
 
   // Build position string: default position first (ESPN shows it first), then other eligible positions
-  const defaultPosName = POS_MAP[posId] ?? null;
+  const defaultPosName = defaultPosMap[posId] ?? null;
   const eligibleSlots =
     (info.eligibleSlots as number[] | undefined) ??
     (entry.eligibleSlots as number[] | undefined) ??
     [];
   const otherPos = [...new Set(
     eligibleSlots
-      .filter((s) => s in SLOT_POS && SLOT_POS[s] !== defaultPosName)
-      .map((s) => SLOT_POS[s])
+      .filter((s) => s in slotPosMap && slotPosMap[s] !== defaultPosName)
+      .map((s) => slotPosMap[s])
   )];
   const allPos = defaultPosName ? [defaultPosName, ...otherPos] : otherPos;
   const position = allPos.length > 0 ? allPos.join(", ") : "UT";
@@ -95,25 +94,27 @@ function parsePlayerEntry(entry: Record<string, unknown>, window: StatsWindow): 
   };
 }
 
-const ALL_WINDOWS: StatsWindow[] = ["season", "30", "15", "7"];
-
-export function usePlayers(leagueId: string, espnS2: string, swid: string, window: StatsWindow) {
+export function usePlayers(leagueId: string, espnS2: string, swid: string, window: StatsWindow, sport: EspnSport = "fba") {
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cfg = SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba;
+  // Use statsFallbackYear for stat parsing when available (e.g. WNBA in off-season).
+  const parseSeasonYear = cfg.statsFallbackYear ?? cfg.seasonYear;
+
   // When the window changes and data is already cached, switch instantly without a fetch.
   useEffect(() => {
     if (!leagueId || !espnS2 || !swid) return;
-    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v4", leagueId, window));
+    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v6", leagueId, `${sport}_${window}`));
     if (cached) setPlayers(cached);
-  }, [leagueId, espnS2, swid, window]);
+  }, [leagueId, espnS2, swid, window, sport]);
 
   const load = useCallback(() => {
     if (!leagueId || !espnS2 || !swid) return;
 
     // If the requested window is already cached, show it immediately (no spinner).
-    const key = cacheKey("players_v4", leagueId, window);
+    const key = cacheKey("players_v6", leagueId, `${sport}_${window}`);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);
@@ -123,9 +124,10 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
     setLoading(true);
     setError(null);
 
-    fetch(`/api/espn/players?leagueId=${encodeURIComponent(leagueId)}&window=${encodeURIComponent(window)}`, {
-      headers: { "x-espn-s2": espnS2, "x-espn-swid": swid },
-    })
+    fetch(
+      `/api/espn/players?leagueId=${encodeURIComponent(leagueId)}&window=${encodeURIComponent(window)}&sport=${sport}`,
+      { headers: { "x-espn-s2": espnS2, "x-espn-swid": swid } }
+    )
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({})) as Record<string, unknown>;
@@ -140,20 +142,26 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
       })
       .then((data: unknown) => {
         const arr = Array.isArray(data) ? data : [];
-        // Parse and cache ALL windows from this single response so switching is instant.
-        for (const w of ALL_WINDOWS) {
+        // Parse and cache ALL available windows from this single response so switching is instant.
+        for (const w of cfg.availableWindows) {
           const parsed: PlayerStats[] = [];
           for (const p of arr) {
-            const stats = parsePlayerEntry(p as Record<string, unknown>, w);
+            const stats = parsePlayerEntry(
+              p as Record<string, unknown>,
+              w,
+              parseSeasonYear,
+              cfg.slotPosMap,
+              cfg.defaultPosMap,
+            );
             if (stats) parsed.push(stats);
           }
-          cacheSet(cacheKey("players_v4", leagueId, w), parsed);
+          cacheSet(cacheKey("players_v6", leagueId, `${sport}_${w}`), parsed);
           if (w === window) setPlayers(parsed);
         }
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [leagueId, espnS2, swid, window]);
+  }, [leagueId, espnS2, swid, window, sport, cfg, parseSeasonYear]);
 
   useEffect(() => {
     load();

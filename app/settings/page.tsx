@@ -2,12 +2,29 @@
 
 import { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { saveSettings } from "@/lib/espn-client";
 import { clearCache } from "@/lib/espn-cache";
 import { useLeague } from "@/hooks/useLeague";
 import { scoringConfigLabel } from "@/lib/scoring-config";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
+import type { EspnSport } from "@/lib/types";
+
+type ConnectedInfo = { label: string; emoji: string; name: string };
+
+// ESPN league URL pattern per sport (for hint text in the League ID field)
+const SPORT_URL_HINTS: Record<EspnSport, string> = {
+  fba:  "fantasy.espn.com/basketball/league?leagueId={ID}",
+  wnba: "fantasy.espn.com/basketball/league?leagueId={ID}",
+  flb:  "fantasy.espn.com/baseball/league?leagueId={ID}",
+  fhl:  "fantasy.espn.com/hockey/league?leagueId={ID}",
+  ffl:  "fantasy.espn.com/football/league?leagueId={ID}",
+};
+
+// Only sports that are fully supported — others shown as "coming soon"
+const ACTIVE_SPORTS: EspnSport[] = ["fba", "wnba"];
+const COMING_SOON_SPORTS: EspnSport[] = ["flb", "fhl", "ffl"];
 
 export default function SettingsPage() {
+  const [sport, setSport] = useState<EspnSport>("fba");
   const [leagueId, setLeagueId] = useState("");
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
@@ -15,28 +32,41 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false);
   const [clickedBookmark, setClickedBookmark] = useState(false);
   const [autoResult, setAutoResult] = useState<{ s2: boolean; swid: boolean; leagueId: boolean } | null>(null);
+  // Persisted league info — loaded immediately from localStorage so the banner
+  // shows on return visits before the league state has loaded from cache.
+  const [savedConnectedInfo, setSavedConnectedInfo] = useState<ConnectedInfo | null>(null);
   const bookmarkRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
     if (params.get("auto") === "1") {
-      // Bookmarklet redirect — merge detected values with any existing saved values
-      const paramS2 = params.get("s2") ?? "";
-      const paramSwid = params.get("swid") ?? "";
-      const paramLid = params.get("leagueId") ?? "";
+      // Bookmarklet redirect — merge detected values with any existing saved values.
+      // Use sport from URL param if present, otherwise use currently saved sport.
+      const paramS2     = params.get("s2") ?? "";
+      const paramSwid   = params.get("swid") ?? "";
+      const paramLid    = params.get("leagueId") ?? "";
+      const paramSport  = (params.get("sport") as EspnSport | null) ?? null;
 
-      const s2 = paramS2 || localStorage.getItem("espn_s2") || "";
-      const swidVal = paramSwid || localStorage.getItem("espn_swid") || "";
-      const lid = paramLid || localStorage.getItem("espn_leagueId") || "";
+      const activeSport = (paramSport && paramSport in SPORT_CONFIGS)
+        ? paramSport
+        : ((localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba");
 
+      const s2      = paramS2    || localStorage.getItem("espn_s2")    || "";
+      const swidVal = paramSwid  || localStorage.getItem("espn_swid")  || "";
+      const lid     = paramLid   || localStorage.getItem(`espn_leagueId_${activeSport}`) || localStorage.getItem("espn_leagueId") || "";
+
+      setSport(activeSport);
       setEspnS2(s2);
       setSwid(swidVal);
       setLeagueId(lid);
       setAutoResult({ s2: !!paramS2, swid: !!paramSwid, leagueId: !!paramLid });
 
       if (s2 && swidVal && lid) {
-        saveSettings(lid, s2, swidVal);
+        localStorage.setItem("espn_sport", activeSport);
+        localStorage.setItem(`espn_leagueId_${activeSport}`, lid);
+        localStorage.setItem("espn_s2", s2);
+        localStorage.setItem("espn_swid", swidVal);
         clearCache(lid);
         setSaved(true);
       }
@@ -44,11 +74,28 @@ export default function SettingsPage() {
       // Clean the URL so refreshing doesn't re-trigger
       window.history.replaceState({}, "", "/settings");
     } else {
-      setLeagueId(localStorage.getItem("espn_leagueId") ?? "");
+      const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
+      const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
+      setSport(validSport);
+      // Fall back to legacy key only for NBA (fba) — other sports must use their own saved ID
+      const leagueIdFallback = validSport === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "";
+      setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
     }
   }, []);
+
+  // When sport changes: load that sport's saved leagueId and immediately persist the sport
+  // so the navbar updates in real-time.
+  function handleSportChange(newSport: EspnSport) {
+    setSport(newSport);
+    const savedLid = localStorage.getItem(`espn_leagueId_${newSport}`) ?? "";
+    setLeagueId(savedLid);
+    setSaved(false);
+    // Persist sport immediately so NavTabs reflects the change without requiring Save
+    localStorage.setItem("espn_sport", newSport);
+    window.dispatchEvent(new Event("espn-settings-changed"));
+  }
 
   // Generate bookmarklet pointing to this app's origin — set via ref to avoid React's javascript: sanitization
   useEffect(() => {
@@ -64,40 +111,102 @@ export default function SettingsPage() {
       `var sw=c['SWID']||'';` +
       `var m=location.href.match(/[?&]leagueId=(\\d+)/);` +
       `var lid=m?m[1]:'';` +
-      `location.href='${origin}/settings?auto=1&leagueId='+encodeURIComponent(lid)+'&s2='+encodeURIComponent(s2)+'&swid='+encodeURIComponent(sw);` +
+      `var sp=localStorage.getItem('espn_sport')||'fba';` +
+      `location.href='${origin}/settings?auto=1&leagueId='+encodeURIComponent(lid)+'&s2='+encodeURIComponent(s2)+'&swid='+encodeURIComponent(sw)+'&sport='+encodeURIComponent(sp);` +
     `})();`;
     bookmarkRef.current.href = code;
   }, []);
 
-  const { league, scoringConfig } = useLeague(leagueId, espnS2, swid);
+  const { league, scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
+  const sportCfg = SPORT_CONFIGS[sport];
+
+  // Load persisted connected info for the current sport immediately on mount / sport change.
+  // This ensures the banner shows right away on return visits before league state loads from cache.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`espn_last_connected_${sport}`);
+      setSavedConnectedInfo(raw ? (JSON.parse(raw) as ConnectedInfo) : null);
+    } catch {
+      setSavedConnectedInfo(null);
+    }
+  }, [sport]);
+
+  // Save connected info whenever the league loads — keeps the persisted data fresh.
+  useEffect(() => {
+    if (!league) return;
+    const info: ConnectedInfo = {
+      label: scoringConfigLabel(scoringConfig),
+      emoji: sportCfg.emoji,
+      name:  sportCfg.name,
+    };
+    setSavedConnectedInfo(info);
+    localStorage.setItem(`espn_last_connected_${sport}`, JSON.stringify(info));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.leagueId, scoringConfig]);
+
+  // Auto-save credentials whenever the league loads successfully — no Save button needed
+  useEffect(() => {
+    if (!league) return;
+    const lid = leagueId.trim();
+    const s2  = espnS2.trim();
+    const sw  = swid.trim();
+    if (!lid || !s2 || !sw) return;
+    localStorage.setItem("espn_sport", sport);
+    localStorage.setItem(`espn_leagueId_${sport}`, lid);
+    localStorage.setItem("espn_s2", s2);
+    localStorage.setItem("espn_swid", sw);
+    window.dispatchEvent(new Event("espn-settings-changed"));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.leagueId]);
 
   function handleSave() {
-    saveSettings(leagueId.trim(), espnS2.trim(), swid.trim());
-    clearCache(leagueId.trim());
+    const lid = leagueId.trim();
+    const s2  = espnS2.trim();
+    const sw  = swid.trim();
+    localStorage.setItem("espn_sport", sport);
+    localStorage.setItem(`espn_leagueId_${sport}`, lid);
+    localStorage.setItem("espn_s2", s2);
+    localStorage.setItem("espn_swid", sw);
+    clearCache(lid);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
 
   const allAutoDetected = autoResult?.s2 && autoResult?.swid && autoResult?.leagueId;
   const partialAutoDetected = autoResult && !allAutoDetected;
+  const offSeason = league && league.scoringPeriodId === 0;
 
   return (
     <div className="max-w-xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-white mb-2">Settings</h1>
       <p className="text-gray-500 text-sm mb-8">
-        Connect to your ESPN Fantasy Basketball league. Credentials are stored only in your browser.
+        Connect to your ESPN Fantasy league. Credentials are stored only in your browser.
       </p>
 
-      {/* League loaded banner */}
-      {league && (
-        <div className="mb-6 bg-green-500/10 border border-green-500/25 rounded-lg p-4 text-sm space-y-1">
-          <p className="font-semibold text-white flex items-center gap-2">
-            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 text-green-400 text-xs font-bold shrink-0">✓</span>
-            Your league loaded successfully.
-          </p>
-          <p className="text-gray-500 pl-7">The league format is</p>
-          <p className="font-mono text-gray-200 pl-7">{scoringConfigLabel(scoringConfig)}</p>
-          <p className="text-gray-600 pl-7 text-xs pt-1">Changed your ESPN league settings? Click Save Settings again to refresh.</p>
+
+      {/* League loaded banner — shows scoring config above Quick Connect.
+          Uses savedConnectedInfo as instant fallback so it appears on page return
+          before the league state has been re-loaded from cache. */}
+      {(league || savedConnectedInfo) && (() => {
+        const info: ConnectedInfo = league
+          ? { label: scoringConfigLabel(scoringConfig), emoji: sportCfg.emoji, name: sportCfg.name }
+          : savedConnectedInfo!;
+        return (
+          <div className="mb-3 bg-green-500/10 border border-green-500/25 rounded-lg p-4 text-sm space-y-1">
+            <p className="font-semibold text-white flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 text-green-400 text-xs font-bold shrink-0">✓</span>
+              {info.emoji} {info.name} league connected
+            </p>
+            <p className="font-mono text-gray-400 pl-7">{info.label}</p>
+            <p className="text-gray-600 pl-7 text-xs pt-1">Changed your ESPN league settings? Click Save Settings to force-refresh.</p>
+          </div>
+        );
+      })()}
+
+      {/* Off-season banner */}
+      {offSeason && (
+        <div className="mb-6 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-300">
+          {sportCfg.name} is in off-season — stat windows will show the most recent completed season data.
         </div>
       )}
 
@@ -163,15 +272,65 @@ export default function SettingsPage() {
         </ol>
       </div>
 
+      {/* Compact league confirmation — shown between Quick Connect and Manual Setup */}
+      {(league || savedConnectedInfo) && (
+        <div className="flex items-center gap-2 mb-2 px-1">
+          <span className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500/20 text-green-400 text-xs font-bold shrink-0">✓</span>
+          <span className="text-xs text-green-400 font-medium">
+            Connected to {league ? sportCfg.emoji : savedConnectedInfo!.emoji}{" "}
+            {league ? sportCfg.name : savedConnectedInfo!.name}
+          </span>
+        </div>
+      )}
+
       {/* ── Manual Setup ──────────────────────────────────── */}
       <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6">
         <h2 className="text-base font-semibold text-white mb-1">Manual Setup</h2>
         <p className="text-xs text-gray-500 mb-5">Or paste your credentials directly.</p>
 
         <div className="flex flex-col gap-5">
+          {/* Sport selector */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-white">Sport</label>
+            <p className="text-xs text-gray-500">Select your ESPN fantasy sport. Each sport has its own League ID.</p>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {ACTIVE_SPORTS.map((s) => {
+                const c = SPORT_CONFIGS[s];
+                return (
+                  <button
+                    key={s}
+                    onClick={() => handleSportChange(s)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                      sport === s
+                        ? "bg-[#e8193c] border-[#e8193c] text-white"
+                        : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                    }`}
+                  >
+                    <span>{c.emoji}</span>
+                    <span>{c.name}</span>
+                  </button>
+                );
+              })}
+              {COMING_SOON_SPORTS.map((s) => {
+                const c = SPORT_CONFIGS[s];
+                return (
+                  <button
+                    key={s}
+                    disabled
+                    className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/5 text-gray-500 cursor-not-allowed"
+                  >
+                    <span className="absolute -top-2 -right-1 text-[9px] bg-[#1a1f2e] border border-amber-500/40 px-1 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
+                    <span>{c.emoji}</span>
+                    <span>{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <Field
             label="League ID"
-            hint={`From your ESPN league URL: fantasy.espn.com/basketball/league?leagueId={ID}`}
+            hint={`From your ESPN league URL: ${SPORT_URL_HINTS[sport]}`}
             value={leagueId}
             onChange={setLeagueId}
             placeholder="123456789"
@@ -215,7 +374,7 @@ export default function SettingsPage() {
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="bg-white p-3 rounded-xl shrink-0">
               <QRCodeSVG
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}`}
+                value={`${typeof window !== "undefined" ? window.location.origin : ""}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}&sport=${encodeURIComponent(sport)}`}
                 size={160}
               />
             </div>
@@ -223,7 +382,7 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-400">Or copy the link and send it to your phone:</p>
               <button
                 onClick={() => {
-                  const url = `${window.location.origin}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}`;
+                  const url = `${window.location.origin}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}&sport=${encodeURIComponent(sport)}`;
                   navigator.clipboard.writeText(url);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2500);

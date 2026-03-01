@@ -4,8 +4,8 @@ import { NavTabs } from "@/components/NavTabs";
 import { AnalyticsProvider } from "@/components/AnalyticsProvider";
 
 export const metadata: Metadata = {
-  title: "Fantasy Tool",
-  description: "ESPN Fantasy Basketball trade analyzer & team comparison",
+  title: "ESPN Fantasy Tool",
+  description: "ESPN Fantasy trade analyzer & team comparison — NBA, WNBA, MLB, NHL, NFL",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
