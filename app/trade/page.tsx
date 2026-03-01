@@ -76,6 +76,10 @@ export default function TradePage() {
 
   const allBucketedIds = [...givingIds, ...receivingIds];
   const noSettings = !leagueId || !espnS2 || !swid;
+  const windowNote = getStatsWindowNote(sportConfig, statsWindow);
+  // For off-season sports, hide the player UI on any window other than "season"
+  // (e.g. WNBA proj loads 2025 projection data but those stats aren't meaningful for 2026)
+  const offseasonNoData = !!windowNote && statsWindow !== "season";
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -105,11 +109,11 @@ export default function TradePage() {
       {error && <div className="mb-6"><ErrorBanner message={error} onRetry={reload} /></div>}
       {loading && <div className="text-center py-12 text-gray-500 text-sm">Loading player pool…</div>}
 
-      {!loading && !noSettings && !error && players.length > 0 && (
+      {!loading && !noSettings && !error && players.length > 0 && !offseasonNoData && (
         <>
-          {getStatsWindowNote(sportConfig, statsWindow) && (
+          {windowNote && (
             <div className="mb-6 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-300">
-              {getStatsWindowNote(sportConfig, statsWindow)}
+              {windowNote}
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -240,13 +244,10 @@ export default function TradePage() {
         </>
       )}
 
-      {!loading && !noSettings && !error && players.length === 0 && (
-        <div className="text-center py-12 text-sm">
-          {getStatsWindowNote(sportConfig, statsWindow)
-            ? <span className="text-amber-400/80">{getStatsWindowNote(sportConfig, statsWindow)}</span>
-            : <span className="text-gray-500">No players loaded. Check your settings or retry.</span>
-          }
-        </div>
+      {!loading && !noSettings && !error && (players.length === 0 || offseasonNoData) && (
+        windowNote
+          ? <div className="mb-6 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-300">{windowNote}</div>
+          : <div className="text-center py-12 text-sm text-gray-500">No players loaded. Check your settings or retry.</div>
       )}
     </div>
   );
