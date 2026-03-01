@@ -6,7 +6,7 @@ import { useLeague } from "@/hooks/useLeague";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { calcTradeScore } from "@/lib/trade-score";
 import { scoringConfigLabel } from "@/lib/scoring-config";
-import { SPORT_CONFIGS } from "@/lib/sports-config";
+import { SPORT_CONFIGS, getStatsWindowNote } from "@/lib/sports-config";
 import { StatsWindowTabs } from "@/components/StatsWindowTabs";
 import { PlayerSearch } from "@/components/PlayerSearch";
 import { PlayerBucket } from "@/components/PlayerBucket";
@@ -29,16 +29,19 @@ export default function TradePage() {
   const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
-    const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
-    const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
-    setSport(validSport);
-    setLeagueId(
-      localStorage.getItem(`espn_leagueId_${validSport}`) ??
-      localStorage.getItem("espn_leagueId") ??
-      ""
-    );
-    setEspnS2(localStorage.getItem("espn_s2") ?? "");
-    setSwid(localStorage.getItem("espn_swid") ?? "");
+    function readSettings() {
+      const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
+      const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
+      setSport(validSport);
+      // Only fall back to the legacy key for NBA (fba) — other sports must have their own saved ID
+      const leagueIdFallback = validSport === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "";
+      setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
+      setEspnS2(localStorage.getItem("espn_s2") ?? "");
+      setSwid(localStorage.getItem("espn_swid") ?? "");
+    }
+    readSettings();
+    window.addEventListener("espn-settings-changed", readSettings);
+    return () => window.removeEventListener("espn-settings-changed", readSettings);
   }, []);
 
   const sportConfig = SPORT_CONFIGS[sport];
@@ -87,6 +90,7 @@ export default function TradePage() {
           value={statsWindow}
           onChange={setStatsWindow}
           availableWindows={sportConfig.availableWindows}
+          size="md"
         />
       </div>
 
@@ -103,6 +107,11 @@ export default function TradePage() {
 
       {!loading && !noSettings && !error && players.length > 0 && (
         <>
+          {getStatsWindowNote(sportConfig, statsWindow) && (
+            <div className="mb-6 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-300">
+              {getStatsWindowNote(sportConfig, statsWindow)}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <div className="flex flex-col gap-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-red-400">You Give</p>
@@ -111,12 +120,14 @@ export default function TradePage() {
                 onAdd={(p) => setGivingIds((ids) => [...ids, p.playerId])}
                 exclude={allBucketedIds}
                 placeholder="Add a player you're giving…"
+                sport={sport}
               />
               <PlayerBucket
                 label="Giving"
                 players={giving}
                 onRemove={(id) => setGivingIds((ids) => ids.filter((i) => i !== id))}
                 accentClass="border-red-500/30"
+                sport={sport}
               />
             </div>
 
@@ -127,12 +138,14 @@ export default function TradePage() {
                 onAdd={(p) => setReceivingIds((ids) => [...ids, p.playerId])}
                 exclude={allBucketedIds}
                 placeholder="Add a player you're receiving…"
+                sport={sport}
               />
               <PlayerBucket
                 label="Receiving"
                 players={receiving}
                 onRemove={(id) => setReceivingIds((ids) => ids.filter((i) => i !== id))}
                 accentClass="border-green-500/30"
+                sport={sport}
               />
             </div>
           </div>
@@ -228,8 +241,11 @@ export default function TradePage() {
       )}
 
       {!loading && !noSettings && !error && players.length === 0 && (
-        <div className="text-center py-12 text-gray-500 text-sm">
-          No players loaded. Check your settings or retry.
+        <div className="text-center py-12 text-sm">
+          {getStatsWindowNote(sportConfig, statsWindow)
+            ? <span className="text-amber-400/80">{getStatsWindowNote(sportConfig, statsWindow)}</span>
+            : <span className="text-gray-500">No players loaded. Check your settings or retry.</span>
+          }
         </div>
       )}
     </div>

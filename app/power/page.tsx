@@ -2,15 +2,19 @@
 
 import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useLeague } from "@/hooks/useLeague";
+import { usePlayers } from "@/hooks/usePlayers";
 import { calcTradeScore } from "@/lib/trade-score";
-import { fmt } from "@/lib/stat-calculator";
+import { fmt, aggregateStats } from "@/lib/stat-calculator";
 import { scoringConfigLabel } from "@/lib/scoring-config";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
-import { SPORT_CONFIGS } from "@/lib/sports-config";
-import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig, EspnSport } from "@/lib/types";
+import { SPORT_CONFIGS, getStatsWindowNote } from "@/lib/sports-config";
+import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig, EspnSport, StatsWindow } from "@/lib/types";
 import { WeekRangePicker } from "@/components/WeekRangePicker";
+import { StatsWindowTabs } from "@/components/StatsWindowTabs";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import Link from "next/link";
+
+type AnalysisMode = "weeks" | "roster";
 
 function splitName(name: string): string[] {
   const idx = name.indexOf(" ");
@@ -31,6 +35,123 @@ function accumToStats(acc: WeekAccum, config: LeagueScoringConfig): AggregatedSt
     result[cat.id] = cat.compute(acc, weeks);
   }
   return result;
+}
+
+interface RankedEntry extends PowerRankEntry {
+  rank: number;
+}
+
+// ── Round-robin engine (shared by both modes) ─────────────────────────────────
+function runRoundRobin(
+  statsMap: Record<number, AggregatedStats>,
+  teams: Array<{ id: number; name: string; logo?: string }>,
+  scoringConfig: LeagueScoringConfig,
+): RankedEntry[] {
+  const entriesMap = new Map<number, PowerRankEntry>();
+  for (const team of teams) {
+    entriesMap.set(team.id, {
+      teamId: team.id,
+      teamName: team.name,
+      teamLogo: team.logo,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      winPct: 0,
+      matchups: [],
+    });
+  }
+
+  for (let i = 0; i < teams.length; i++) {
+    for (let j = i + 1; j < teams.length; j++) {
+      const teamA = teams[i];
+      const teamB = teams[j];
+      const result = calcTradeScore(statsMap[teamA.id], statsMap[teamB.id], scoringConfig);
+      const aCatWins = result.losses;
+      const bCatWins = result.winsForReceiving;
+      const pushes   = result.equals;
+
+      const entryA = entriesMap.get(teamA.id)!;
+      const entryB = entriesMap.get(teamB.id)!;
+
+      let aResult: PowerMatchup["result"];
+      let bResult: PowerMatchup["result"];
+
+      if (aCatWins > bCatWins) {
+        aResult = "W"; bResult = "L";
+        entryA.wins++; entryB.losses++;
+      } else if (bCatWins > aCatWins) {
+        aResult = "L"; bResult = "W";
+        entryB.wins++; entryA.losses++;
+      } else {
+        aResult = "T"; bResult = "T";
+        entryA.ties++; entryB.ties++;
+      }
+
+      entryA.matchups.push({
+        opponentId: teamB.id,
+        opponentName: teamB.name,
+        opponentLogo: teamB.logo,
+        teamCatWins: aCatWins,
+        oppCatWins: bCatWins,
+        pushes,
+        result: aResult,
+      });
+      entryB.matchups.push({
+        opponentId: teamA.id,
+        opponentName: teamA.name,
+        opponentLogo: teamA.logo,
+        teamCatWins: bCatWins,
+        oppCatWins: aCatWins,
+        pushes,
+        result: bResult,
+      });
+    }
+  }
+
+  const entries = Array.from(entriesMap.values());
+  for (const entry of entries) {
+    const total = entry.wins + entry.losses + entry.ties;
+    entry.winPct = total > 0 ? ((entry.wins + 0.5 * entry.ties) / total) * 100 : 0;
+  }
+
+  entries.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (a.losses !== b.losses) return a.losses - b.losses;
+    return b.winPct - a.winPct;
+  });
+
+  const ranked: RankedEntry[] = [];
+  let idx = 0;
+  while (idx < entries.length) {
+    let jdx = idx + 1;
+    while (
+      jdx < entries.length &&
+      entries[jdx].wins === entries[idx].wins &&
+      entries[jdx].losses === entries[idx].losses &&
+      entries[jdx].ties === entries[idx].ties
+    ) {
+      jdx++;
+    }
+
+    const group = entries.slice(idx, jdx);
+    const rank = idx + 1;
+
+    if (group.length > 1) {
+      group.sort((a, b) => {
+        const m = a.matchups.find((mu) => mu.opponentId === b.teamId);
+        if (m?.result === "W") return -1;
+        if (m?.result === "L") return 1;
+        return 0;
+      });
+    }
+
+    for (const entry of group) {
+      ranked.push({ ...entry, rank });
+    }
+    idx = jdx;
+  }
+
+  return ranked;
 }
 
 function MatchupTooltip({
@@ -109,25 +230,30 @@ function MatchupTooltip({
   );
 }
 
-interface RankedEntry extends PowerRankEntry {
-  rank: number;
-}
-
 export default function PowerPage() {
   const [leagueId, setLeagueId] = useState("");
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
   const [sport, setSport] = useState<EspnSport>("fba");
 
+  // Mode
+  const [mode, setMode] = useState<AnalysisMode>("weeks");
+
+  // By-Weeks state
   const [startPeriod, setStartPeriod] = useState(1);
   const [endPeriod, setEndPeriod] = useState(1);
 
+  // By-Roster state
+  const [statsWindow, setStatsWindow] = useState<StatsWindow>("season");
+
+  // Shared result state
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rankings, setRankings] = useState<RankedEntry[] | null>(null);
   const [hasCalculated, setHasCalculated] = useState(false);
 
   const autoCalculate = useRef(false);
+  const autoRosterRecalc = useRef(false);
   const shouldScrollRef = useRef(false);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -142,21 +268,24 @@ export default function PowerPage() {
   const [expandedType, setExpandedType] = useState<"W" | "L" | "T" | null>(null);
 
   useEffect(() => {
-    const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
-    const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
-    setSport(validSport);
-    setLeagueId(
-      localStorage.getItem(`espn_leagueId_${validSport}`) ??
-      localStorage.getItem("espn_leagueId") ??
-      ""
-    );
-    setEspnS2(localStorage.getItem("espn_s2") ?? "");
-    setSwid(localStorage.getItem("espn_swid") ?? "");
+    function readSettings() {
+      const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
+      const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
+      setSport(validSport);
+      const leagueIdFallback = validSport === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "";
+      setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
+      setEspnS2(localStorage.getItem("espn_s2") ?? "");
+      setSwid(localStorage.getItem("espn_swid") ?? "");
+    }
+    readSettings();
+    window.addEventListener("espn-settings-changed", readSettings);
+    return () => window.removeEventListener("espn-settings-changed", readSettings);
   }, []);
 
   const sportConfig = SPORT_CONFIGS[sport];
 
   const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid, sport);
+  const { players, loading: playersLoading } = usePlayers(leagueId, espnS2, swid, statsWindow, sport);
 
   useEffect(() => {
     if (!league) return;
@@ -166,11 +295,18 @@ export default function PowerPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.leagueId]);
 
+  // Mode change: clear results
+  useEffect(() => { setRankings(null); setTeamStatsMap(null); }, [mode]);
+
   useEffect(() => { setRankings(null); setTeamStatsMap(null); }, [startPeriod, endPeriod]);
 
-  // Auto-calculate on range change (only after first manual Calculate press)
+  // By-Weeks: auto-calculate on range change (only after first manual Calculate press)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (autoCalculate.current) handleCalculate(); }, [startPeriod, endPeriod]);
+  useEffect(() => { if (autoCalculate.current && mode === "weeks") handleWeeksCalculate(); }, [startPeriod, endPeriod]);
+
+  // By-Roster: mark auto-recalc pending when stats window changes (after first calculate)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (hasCalculated && mode === "roster") autoRosterRecalc.current = true; }, [statsWindow]);
 
   // Scroll to results after a manual Calculate press
   useEffect(() => {
@@ -180,7 +316,8 @@ export default function PowerPage() {
     }
   }, [rankings]);
 
-  const handleCalculate = useCallback(async () => {
+  // ── By-Weeks calculate (original, unchanged) ──────────────────────────────
+  const handleWeeksCalculate = useCallback(async () => {
     if (!leagueId || !espnS2 || !swid || !league) return;
     setCalculating(true);
     setError(null);
@@ -254,119 +391,50 @@ export default function PowerPage() {
         statsMap[team.id] = accumToStats(accumMap.get(team.id)!, scoringConfig);
       }
 
-      const entriesMap = new Map<number, PowerRankEntry>();
-      for (const team of league.teams) {
-        entriesMap.set(team.id, {
-          teamId: team.id,
-          teamName: team.name,
-          teamLogo: team.logo,
-          wins: 0,
-          losses: 0,
-          ties: 0,
-          winPct: 0,
-          matchups: [],
-        });
-      }
-
-      const teams = league.teams;
-      for (let i = 0; i < teams.length; i++) {
-        for (let j = i + 1; j < teams.length; j++) {
-          const teamA = teams[i];
-          const teamB = teams[j];
-          const result = calcTradeScore(statsMap[teamA.id], statsMap[teamB.id], scoringConfig);
-          const aCatWins = result.losses;
-          const bCatWins = result.winsForReceiving;
-          const pushes   = result.equals;
-
-          const entryA = entriesMap.get(teamA.id)!;
-          const entryB = entriesMap.get(teamB.id)!;
-
-          let aResult: PowerMatchup["result"];
-          let bResult: PowerMatchup["result"];
-
-          if (aCatWins > bCatWins) {
-            aResult = "W"; bResult = "L";
-            entryA.wins++; entryB.losses++;
-          } else if (bCatWins > aCatWins) {
-            aResult = "L"; bResult = "W";
-            entryB.wins++; entryA.losses++;
-          } else {
-            aResult = "T"; bResult = "T";
-            entryA.ties++; entryB.ties++;
-          }
-
-          entryA.matchups.push({
-            opponentId: teamB.id,
-            opponentName: teamB.name,
-            opponentLogo: teamB.logo,
-            teamCatWins: aCatWins,
-            oppCatWins: bCatWins,
-            pushes,
-            result: aResult,
-          });
-          entryB.matchups.push({
-            opponentId: teamA.id,
-            opponentName: teamA.name,
-            opponentLogo: teamA.logo,
-            teamCatWins: bCatWins,
-            oppCatWins: aCatWins,
-            pushes,
-            result: bResult,
-          });
-        }
-      }
-
-      const entries = Array.from(entriesMap.values());
-      for (const entry of entries) {
-        const total = entry.wins + entry.losses + entry.ties;
-        entry.winPct = total > 0 ? ((entry.wins + 0.5 * entry.ties) / total) * 100 : 0;
-      }
-
-      entries.sort((a, b) => {
-        if (b.wins !== a.wins) return b.wins - a.wins;
-        if (a.losses !== b.losses) return a.losses - b.losses;
-        return b.winPct - a.winPct;
-      });
-
-      const ranked: RankedEntry[] = [];
-      let idx = 0;
-      while (idx < entries.length) {
-        let jdx = idx + 1;
-        while (
-          jdx < entries.length &&
-          entries[jdx].wins === entries[idx].wins &&
-          entries[jdx].losses === entries[idx].losses &&
-          entries[jdx].ties === entries[idx].ties
-        ) {
-          jdx++;
-        }
-
-        const group = entries.slice(idx, jdx);
-        const rank = idx + 1;
-
-        if (group.length > 1) {
-          group.sort((a, b) => {
-            const m = a.matchups.find((mu) => mu.opponentId === b.teamId);
-            if (m?.result === "W") return -1;
-            if (m?.result === "L") return 1;
-            return 0;
-          });
-        }
-
-        for (const entry of group) {
-          ranked.push({ ...entry, rank });
-        }
-        idx = jdx;
-      }
-
       setTeamStatsMap(statsMap);
-      setRankings(ranked);
+      setRankings(runRoundRobin(statsMap, league.teams, scoringConfig));
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setCalculating(false);
     }
   }, [leagueId, espnS2, swid, startPeriod, endPeriod, league, scoringConfig, sport]);
+
+  // ── By-Roster calculate (new) ─────────────────────────────────────────────
+  const handleRosterCalculate = useCallback(() => {
+    if (!league || players.length === 0) return;
+    setError(null);
+    setRankings(null);
+    setTeamStatsMap(null);
+    setExpandedTeamId(null);
+    setExpandedType(null);
+    setHasCalculated(true);
+
+    try {
+      const playerMap = new Map(players.map((p) => [p.playerId, p]));
+      const statsMap: Record<number, AggregatedStats> = {};
+      for (const team of league.teams) {
+        const rosterPlayers = team.rosterPlayerIds
+          .map((id) => playerMap.get(id))
+          .filter((p): p is NonNullable<typeof p> => p !== undefined);
+        statsMap[team.id] = aggregateStats(rosterPlayers, scoringConfig);
+      }
+      setTeamStatsMap(statsMap);
+      setRankings(runRoundRobin(statsMap, league.teams, scoringConfig));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, [league, players, scoringConfig]);
+
+  // Run pending auto-recalc when players finish loading (must be after handleRosterCalculate)
+  useEffect(() => {
+    if (autoRosterRecalc.current && !playersLoading && players.length > 0) {
+      autoRosterRecalc.current = false;
+      handleRosterCalculate();
+    }
+  }, [players, playersLoading, handleRosterCalculate]);
+
+  const handleCalculate = mode === "weeks" ? handleWeeksCalculate : handleRosterCalculate;
 
   function handleExpandToggle(teamId: number, type: "W" | "L" | "T") {
     if (expandedTeamId === teamId && expandedType === type) {
@@ -380,13 +448,14 @@ export default function PowerPage() {
 
   const noSettings = !leagueId || !espnS2 || !swid;
   const numWeeks = endPeriod - startPeriod + 1;
+  const rosterReady = players.length > 0 && !playersLoading;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Power Rankings</h1>
         <p className="text-gray-500 text-sm mt-0.5">
-          Full round-robin — every team vs every other team, based on averaged stats across the selected week range
+          Full round-robin — every team vs every other team
         </p>
       </div>
 
@@ -421,20 +490,69 @@ export default function PowerPage() {
           )}
 
           <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 mb-6">
-            <WeekRangePicker
-              currentPeriod={league.scoringPeriodId}
-              startPeriod={startPeriod}
-              endPeriod={endPeriod}
-              onStartChange={setStartPeriod}
-              onEndChange={setEndPeriod}
-            />
-            <p className="mt-2 text-xs text-gray-600">
-              {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
-            </p>
+            {/* Mode toggle */}
+            <div className="mb-5">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMode("weeks")}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    mode === "weeks"
+                      ? "bg-[#e8193c] text-white"
+                      : "text-gray-400 hover:text-white border border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  By Weeks
+                </button>
+                <button
+                  onClick={() => setMode("roster")}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    mode === "roster"
+                      ? "bg-[#e8193c] text-white"
+                      : "text-gray-400 hover:text-white border border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  By Current Roster
+                </button>
+              </div>
+            </div>
+
+            {/* By-Weeks controls */}
+            {mode === "weeks" && (
+              <>
+                <WeekRangePicker
+                  currentPeriod={league.scoringPeriodId}
+                  startPeriod={startPeriod}
+                  endPeriod={endPeriod}
+                  onStartChange={setStartPeriod}
+                  onEndChange={setEndPeriod}
+                />
+                <p className="mt-2 text-xs text-gray-600">
+                  {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                </p>
+              </>
+            )}
+
+            {/* By-Roster controls */}
+            {mode === "roster" && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm text-gray-400 shrink-0">Stats window:</span>
+                  <StatsWindowTabs
+                    value={statsWindow}
+                    onChange={setStatsWindow}
+                    availableWindows={sportConfig.availableWindows}
+                    note={getStatsWindowNote(sportConfig, statsWindow)}
+                  />
+                </div>
+                <p className="text-xs text-gray-600">Averages of each team&apos;s active roster — players in IR spots are excluded</p>
+                {playersLoading && <p className="text-sm text-gray-500">Loading player stats…</p>}
+              </div>
+            )}
+
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => { shouldScrollRef.current = true; autoCalculate.current = true; handleCalculate(); }}
-                disabled={calculating}
+                disabled={calculating || (mode === "roster" && !rosterReady)}
                 className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-8 py-2.5 rounded-lg transition-colors"
               >
                 {calculating ? "Calculating…" : "Calculate"}
@@ -444,43 +562,65 @@ export default function PowerPage() {
 
           {hasCalculated && (
             <div ref={resultsRef} className="scroll-mt-14 flex flex-col gap-4">
-              {/* Config label + quick week select — first thing visible after scroll */}
+              {/* Config label + mode info — first thing visible after scroll */}
               <div>
                 <p className="text-center text-xs text-gray-600 mb-2">
                   {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
                 </p>
-                <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
-                  <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
-                  {[1, 2, 3, 4, 6, 8].map((n) => {
-                    const lastEnd = Math.max(1, league.scoringPeriodId - 1);
-                    const presetStart = Math.max(1, lastEnd - n + 1);
-                    const active = startPeriod === presetStart && endPeriod === lastEnd;
-                    return (
+
+                {/* By-Weeks: quick week selects */}
+                {mode === "weeks" && (
+                  <>
+                    <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                      <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
+                      {[1, 2, 3, 4, 6, 8].map((n) => {
+                        const lastEnd = Math.max(1, league.scoringPeriodId - 1);
+                        const presetStart = Math.max(1, lastEnd - n + 1);
+                        const active = startPeriod === presetStart && endPeriod === lastEnd;
+                        return (
+                          <button
+                            key={n}
+                            onClick={() => { setStartPeriod(presetStart); setEndPeriod(lastEnd); }}
+                            className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                              active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                            }`}
+                          >
+                            Last {n}w
+                          </button>
+                        );
+                      })}
                       <button
-                        key={n}
-                        onClick={() => { setStartPeriod(presetStart); setEndPeriod(lastEnd); }}
+                        onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
                         className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                          active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                          startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
+                            ? "bg-[#e8193c] border-[#e8193c] text-white"
+                            : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
                         }`}
                       >
-                        Last {n}w
+                        Season
                       </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
-                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                      startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
-                        ? "bg-[#e8193c] border-[#e8193c] text-white"
-                        : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
-                    }`}
-                  >
-                    Season
-                  </button>
-                </div>
-                <p className="text-xs text-gray-600 text-center">
-                  {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
-                </p>
+                    </div>
+                    <p className="text-xs text-gray-600 text-center">
+                      {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                    </p>
+                  </>
+                )}
+
+                {/* By-Roster: window selector */}
+                {mode === "roster" && (
+                  <>
+                    <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                      <span className="text-xs text-gray-500 shrink-0">Stats window:</span>
+                      <StatsWindowTabs
+                        value={statsWindow}
+                        onChange={setStatsWindow}
+                        availableWindows={sportConfig.availableWindows}
+                        note={getStatsWindowNote(sportConfig, statsWindow)}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 text-center">Averages of each team&apos;s active roster — players in IR spots are excluded</p>
+                  </>
+                )}
               </div>
 
               {error && <ErrorBanner message={error} onRetry={handleCalculate} />}

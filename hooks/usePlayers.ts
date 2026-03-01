@@ -6,12 +6,14 @@ import { SPORT_CONFIGS } from "@/lib/sports-config";
 import type { PlayerStats, StatsWindow, EspnSport } from "@/lib/types";
 import { STAT_IDS } from "@/lib/types";
 
-// Map our window key to ESPN statSplitTypeId (all use statSourceId=0)
+// Map our window key to ESPN statSplitTypeId
+// statSourceId: 0 = actual stats, 1 = projections (proj window)
 const SPLIT_TYPE: Record<StatsWindow, number> = {
   season: 0,
   "30": 3,
   "15": 2,
   "7": 1,
+  proj: 0,  // projections use split type 0 (full-season), but statSourceId 1
 };
 
 function parsePlayerEntry(
@@ -27,13 +29,14 @@ function parsePlayerEntry(
 
   const statsArr = (info.stats ?? []) as unknown[];
   const targetSplit = SPLIT_TYPE[window];
+  const isProj = window === "proj";
 
   let statsEntry: Record<string, unknown> | null = null;
   for (const s of statsArr) {
     const stat = s as Record<string, unknown>;
     if (
       stat.seasonId === seasonYear &&
-      stat.statSourceId === 0 &&
+      stat.statSourceId === (isProj ? 1 : 0) &&
       stat.statSplitTypeId === targetSplit
     ) {
       statsEntry = stat;
@@ -97,11 +100,13 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
   const [error, setError] = useState<string | null>(null);
 
   const cfg = SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba;
+  // Use statsFallbackYear for stat parsing when available (e.g. WNBA in off-season).
+  const parseSeasonYear = cfg.statsFallbackYear ?? cfg.seasonYear;
 
   // When the window changes and data is already cached, switch instantly without a fetch.
   useEffect(() => {
     if (!leagueId || !espnS2 || !swid) return;
-    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v5", leagueId, `${sport}_${window}`));
+    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v6", leagueId, `${sport}_${window}`));
     if (cached) setPlayers(cached);
   }, [leagueId, espnS2, swid, window, sport]);
 
@@ -109,7 +114,7 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
     if (!leagueId || !espnS2 || !swid) return;
 
     // If the requested window is already cached, show it immediately (no spinner).
-    const key = cacheKey("players_v5", leagueId, `${sport}_${window}`);
+    const key = cacheKey("players_v6", leagueId, `${sport}_${window}`);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);
@@ -144,19 +149,19 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
             const stats = parsePlayerEntry(
               p as Record<string, unknown>,
               w,
-              cfg.seasonYear,
+              parseSeasonYear,
               cfg.slotPosMap,
               cfg.defaultPosMap,
             );
             if (stats) parsed.push(stats);
           }
-          cacheSet(cacheKey("players_v5", leagueId, `${sport}_${w}`), parsed);
+          cacheSet(cacheKey("players_v6", leagueId, `${sport}_${w}`), parsed);
           if (w === window) setPlayers(parsed);
         }
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [leagueId, espnS2, swid, window, sport, cfg]);
+  }, [leagueId, espnS2, swid, window, sport, cfg, parseSeasonYear]);
 
   useEffect(() => {
     load();

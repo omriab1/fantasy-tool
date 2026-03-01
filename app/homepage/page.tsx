@@ -35,7 +35,7 @@ export default function HomePage() {
         <div className="text-4xl mb-3">🏀</div>
         <h1 className="text-2xl font-bold text-white tracking-wide">Fantasy Tool</h1>
         <p className="text-gray-400 mt-1.5 text-xs max-w-xs mx-auto leading-relaxed">
-          Your ESPN fantasy basketball toolkit — analyze trades, compare teams, and rank your league.
+          Your ESPN fantasy toolkit — analyze trades, compare teams, and rank your league.
         </p>
       </div>
 

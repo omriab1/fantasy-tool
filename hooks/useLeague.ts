@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
 import { parseLeagueScoringConfig, DEFAULT_SCORING_CONFIG } from "@/lib/scoring-config";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
 import type { LeagueInfo, LeagueTeam, LeagueScoringConfig, EspnSport } from "@/lib/types";
 
-function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
+function parseLeagueData(data: Record<string, unknown>, irSlotIds: number[]): LeagueInfo {
+  const irSet = new Set(irSlotIds);
   const teams: LeagueTeam[] = ((data.teams as unknown[]) ?? []).map((t: unknown) => {
     const team = t as Record<string, unknown>;
 
@@ -15,10 +17,35 @@ function parseLeagueData(data: Record<string, unknown>): LeagueInfo {
       || `Team ${team.id}`;
 
     const rosterEntries = ((team.roster as Record<string, unknown>)?.entries ?? []) as unknown[];
-    const rosterPlayerIds = rosterEntries
-      .map((e) => (e as Record<string, unknown>).playerId as number)
-      .filter(Boolean);
 
+    // Two-pass IR filter:
+    // Pass 1 — identify every player ID that appears in ANY IR/IL lineup slot.
+    //           A player might appear twice (IR slot + a normal slot) in unusual API responses;
+    //           if they have any IR entry they are considered on IR and fully excluded.
+    const irPlayerIds = new Set<number>();
+    if (irSet.size > 0) {
+      for (const e of rosterEntries) {
+        const entry = e as Record<string, unknown>;
+        const ppe = entry.playerPoolEntry as Record<string, unknown> | undefined;
+        const slotId = Number(entry.lineupSlotId ?? ppe?.lineupSlotId ?? -1);
+        if (irSet.has(slotId)) {
+          const pid = Number(entry.playerId ?? ppe?.playerId ?? 0);
+          if (pid > 0) irPlayerIds.add(pid);
+        }
+      }
+    }
+    // Pass 2 — collect unique player IDs that are NOT on IR.
+    const seen = new Set<number>();
+    const rosterPlayerIds: number[] = [];
+    for (const e of rosterEntries) {
+      const entry = e as Record<string, unknown>;
+      const ppe = entry.playerPoolEntry as Record<string, unknown> | undefined;
+      const pid = Number(entry.playerId ?? ppe?.playerId ?? 0);
+      if (pid > 0 && !irPlayerIds.has(pid) && !seen.has(pid)) {
+        seen.add(pid);
+        rosterPlayerIds.push(pid);
+      }
+    }
     const primaryOwner =
       (team.primaryOwner as string) ??
       ((team.owners as string[])?.[0]) ??
@@ -51,19 +78,32 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!leagueId || !espnS2 || !swid) return;
+    const sportCfg = SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba;
+    // Always reset to the sport-appropriate default first so switching sports
+    // never shows a stale config from a different sport (e.g. NBA 9-cat for WNBA).
+    if (!leagueId || !espnS2 || !swid) {
+      setScoringConfig(sportCfg.defaultScoringConfig);
+      setLeague(null);
+      return;
+    }
 
     // Cache keys include sport to isolate per-sport caches.
+    // v11 bumped to force re-fetch with irSlotIds expanded to [13, 20, 21].
     // LeagueScoringConfig contains functions which cannot be JSON-serialised,
     // so we cache the plain settings object and re-parse on every restore.
-    const leagueKey   = cacheKey("league",   leagueId, `${sport}_mTeam_v3`);
+    const leagueKey   = cacheKey("league",   leagueId, `${sport}_mTeam_v11`);
     const settingsKey = cacheKey("settings",  leagueId, `${sport}_v1`);
 
-    // Remove legacy NBA-only cache entries (no sport prefix)
+    // Remove all previous cache versions so they don't accumulate in localStorage
     if (typeof window !== "undefined") {
-      localStorage.removeItem(cacheKey("league",   leagueId, "mTeam_v3"));
-      localStorage.removeItem(cacheKey("settings", leagueId, "v1"));
-      localStorage.removeItem(cacheKey("league",   leagueId, "v4"));
+      for (const oldKey of [
+        "mTeam_v3", "mTeam_v4", "mTeam_v5", "mTeam_v6", "mTeam_v7",
+        "mTeam_v8", "mTeam_v9", "mTeam_v10",
+        `${sport}_mTeam_v3`, `${sport}_mTeam_v4`, `${sport}_mTeam_v5`, `${sport}_mTeam_v6`,
+        `${sport}_mTeam_v7`, `${sport}_mTeam_v8`, `${sport}_mTeam_v9`, `${sport}_mTeam_v10`,
+      ]) {
+        localStorage.removeItem(cacheKey("league", leagueId, oldKey));
+      }
     }
 
     const cachedLeague   = cacheGet<LeagueInfo>(leagueKey);
@@ -78,6 +118,8 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
       return;
     }
 
+    // Reset to sport default while the fetch is in flight
+    setScoringConfig(sportCfg.defaultScoringConfig);
     setLoading(true);
     setError(null);
 
@@ -100,7 +142,8 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
         return res.json();
       })
       .then((data: Record<string, unknown>) => {
-        const info   = parseLeagueData(data);
+        const irSlotIds = (SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba).irSlotIds;
+        const info   = parseLeagueData(data, irSlotIds);
         const config = parseLeagueScoringConfig(data.settings);
 
         // Cache league info + raw settings (both are plain JSON — no functions)

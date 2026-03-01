@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SPORT_CONFIGS } from "@/lib/sports-config";
+import { SPORT_CONFIGS, apiBase, apiSegment } from "@/lib/sports-config";
 import type { EspnSport } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -17,20 +17,26 @@ export async function GET(req: NextRequest) {
 
   // ESPN stat window filter headers.
   // The season filter's additionalValue uses ESPN season-code format: "00{year}" and "10{year}".
+  // statsFallbackYear: for sports in off-season (e.g. WNBA), stats live under the prior year.
   const y = cfg.seasonYear;
+  const statsY = cfg.statsFallbackYear ?? y;
   const WINDOW_FILTERS: Record<string, object> = {
     season: {
-      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`00${y}`, `10${y}`, `00${y - 1}`] },
+      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`00${statsY}`, `10${statsY}`, `00${statsY - 1}`] },
     },
     "30": { filterStatsForTopScoringPeriodIds: { value: 30 } },
     "15": { filterStatsForTopScoringPeriodIds: { value: 15 } },
     "7": { filterStatsForTopScoringPeriodIds: { value: 7 } },
+    // Projections: statSourceId=1 entries — "10{year}" is the ESPN projection season code
+    proj: {
+      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`10${statsY}`, `00${statsY}`] },
+    },
   };
 
   const filter = WINDOW_FILTERS[window] ?? WINDOW_FILTERS["season"];
   const filterHeader = JSON.stringify({ players: filter });
 
-  const base = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${cfg.sport}/seasons/${cfg.seasonYear}/segments/0/leagues`;
+  const base = `${apiBase(cfg)}/games/${apiSegment(cfg)}/seasons/${cfg.seasonYear}/segments/0/leagues`;
   const url = `${base}/${leagueId}/players?scoringPeriodId=0&view=kona_player_info`;
 
   try {

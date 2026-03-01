@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SPORT_CONFIGS } from "@/lib/sports-config";
+import { SPORT_CONFIGS, apiBase, apiSegment } from "@/lib/sports-config";
 import type { EspnSport } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   // mMatchup view returns full-season schedule with per-category scoreByStat for every team.
   // One call gets all historical matchup weeks — no need for one call per week.
-  const base = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${cfg.sport}/seasons/${cfg.seasonYear}/segments/0/leagues`;
+  const base = `${apiBase(cfg)}/games/${apiSegment(cfg)}/seasons/${cfg.seasonYear}/segments/0/leagues`;
   const url = `${base}/${leagueId}?scoringPeriodId=${period}&view=mMatchup`;
 
   try {

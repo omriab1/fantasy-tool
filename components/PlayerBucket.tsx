@@ -1,13 +1,17 @@
 import type { PlayerStats } from "@/lib/types";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
+import type { EspnSport } from "@/lib/types";
 
 interface Props {
   label: string;
   players: PlayerStats[];
   onRemove: (playerId: number) => void;
   accentClass?: string; // e.g. "border-red-500/50" or "border-green-500/50"
+  sport?: EspnSport;
 }
 
-export function PlayerBucket({ label, players, onRemove, accentClass = "border-white/10" }: Props) {
+export function PlayerBucket({ label, players, onRemove, accentClass = "border-white/10", sport = "fba" }: Props) {
+  const cdn = SPORT_CONFIGS[sport]?.cdnLeague ?? "nba";
   return (
     <div className={`bg-[#1a1f2e] border ${accentClass} rounded-xl p-4 flex flex-col gap-3`}>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{label}</p>
@@ -23,7 +27,7 @@ export function PlayerBucket({ label, players, onRemove, accentClass = "border-w
               <div className="relative shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.playerId}.png`}
+                  src={`https://a.espncdn.com/i/headshots/${cdn}/players/full/${p.playerId}.png`}
                   alt=""
                   className="w-8 h-8 rounded-full object-cover bg-white/10"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -31,7 +35,7 @@ export function PlayerBucket({ label, players, onRemove, accentClass = "border-w
                 {p.teamAbbrev !== "0" && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={`https://a.espncdn.com/i/teamlogos/nba/500/${p.teamAbbrev}.png`}
+                    src={`https://a.espncdn.com/i/teamlogos/${cdn}/500/${p.teamAbbrev}.png`}
                     alt=""
                     className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full object-cover bg-[#1a1f2e] ring-1 ring-[#1a1f2e]"
                     onError={(e) => { e.currentTarget.style.display = "none"; }}

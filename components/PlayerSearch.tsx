@@ -1,16 +1,19 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import type { PlayerStats } from "@/lib/types";
+import type { PlayerStats, EspnSport } from "@/lib/types";
+import { SPORT_CONFIGS } from "@/lib/sports-config";
 
 interface Props {
   players: PlayerStats[];
   onAdd: (player: PlayerStats) => void;
   placeholder?: string;
   exclude?: number[]; // playerIds already in buckets
+  sport?: EspnSport;
 }
 
-export function PlayerSearch({ players, onAdd, placeholder = "Search players…", exclude = [] }: Props) {
+export function PlayerSearch({ players, onAdd, placeholder = "Search players…", exclude = [], sport = "fba" }: Props) {
+  const cdn = SPORT_CONFIGS[sport]?.cdnLeague ?? "nba";
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -67,7 +70,7 @@ export function PlayerSearch({ players, onAdd, placeholder = "Search players…"
                 <div className="relative shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.playerId}.png`}
+                    src={`https://a.espncdn.com/i/headshots/${cdn}/players/full/${p.playerId}.png`}
                     alt=""
                     className="w-8 h-8 rounded-full object-cover bg-white/10"
                     onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -75,7 +78,7 @@ export function PlayerSearch({ players, onAdd, placeholder = "Search players…"
                   {p.teamAbbrev !== "0" && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={`https://a.espncdn.com/i/teamlogos/nba/500/${p.teamAbbrev}.png`}
+                      src={`https://a.espncdn.com/i/teamlogos/${cdn}/500/${p.teamAbbrev}.png`}
                       alt=""
                       className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full object-cover bg-[#1a1f2e] ring-1 ring-[#1a1f2e]"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
