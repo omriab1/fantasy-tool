@@ -71,6 +71,7 @@ export default function SettingsPage() {
   // Persisted league info — loaded immediately from localStorage so the banner
   // shows on return visits before the league state has loaded from cache.
   const [savedConnectedInfo, setSavedConnectedInfo] = useState<ConnectedInfo | null>(null);
+  const [comingSoonAlert, setComingSoonAlert] = useState<string | null>(null);
   // Multi-league state
   const [savedLeagues, setSavedLeagues] = useState<SavedLeague[]>([]);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
@@ -88,6 +89,23 @@ export default function SettingsPage() {
       const paramSwid  = params.get("swid") ?? "";
       const paramLid   = params.get("leagueId") ?? "";
       const paramSport = (params.get("sport") as EspnSport | null) ?? null;
+
+      // If Quick Connect detected a sport that isn't supported yet, show a message and stop.
+      // Still load existing saved credentials so Manual Setup looks unchanged.
+      if (paramSport && COMING_SOON_SPORTS.includes(paramSport as EspnSport)) {
+        const sportName = SPORT_CONFIGS[paramSport as EspnSport]?.name ?? paramSport;
+        setComingSoonAlert(sportName);
+        window.history.replaceState({}, "", "/settings");
+        const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
+        const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
+        setSport(validSport);
+        const leagueIdFallback = validSport === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "";
+        setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
+        setEspnS2(localStorage.getItem("espn_s2") ?? "");
+        setSwid(localStorage.getItem("espn_swid") ?? "");
+        setSavedLeagues(loadSavedLeagues(validSport));
+        return;
+      }
 
       const activeSport = (paramSport && paramSport in SPORT_CONFIGS)
         ? paramSport
@@ -390,6 +408,22 @@ export default function SettingsPage() {
         Connect to your ESPN Fantasy league. Credentials are stored only in your browser.
       </p>
 
+
+      {/* Coming-soon sport alert — shown when Quick Connect detects an unsupported sport */}
+      {comingSoonAlert && (
+        <div className="mb-6 bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-amber-300">{comingSoonAlert} is not available yet</p>
+            <p className="text-xs text-amber-400/70 mt-1">We&apos;re working on it — check back soon!</p>
+          </div>
+          <button
+            onClick={() => setComingSoonAlert(null)}
+            className="text-amber-500/60 hover:text-amber-300 text-xl leading-none shrink-0 transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* League loaded banner — shows scoring config above Quick Connect.
           Uses savedConnectedInfo as instant fallback so it appears on page return
