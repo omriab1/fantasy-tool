@@ -123,17 +123,44 @@ export default function SettingsPage() {
         }
       }
 
-      // New lids_{sport} comma-separated params (multi-league transfer)
+      // lids_{sport} comma-separated params (backwards compat — no labels)
       for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
         const raw = params.get(`lids_${s}`);
         if (!raw) continue;
         const incoming = raw.split(",").filter(Boolean);
         if (incoming.length === 0) continue;
-        // Set active league ID for this sport if not already set
         if (!localStorage.getItem(`espn_leagueId_${s}`)) {
           localStorage.setItem(`espn_leagueId_${s}`, incoming[0]);
         }
         for (const id of incoming) appendLeague(s, id);
+      }
+
+      // lmeta_{sport} JSON params — full league metadata including labels
+      for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
+        const rawMeta = params.get(`lmeta_${s}`);
+        if (!rawMeta) continue;
+        try {
+          const meta = JSON.parse(rawMeta) as Array<{ id: string; label?: string }>;
+          if (meta.length === 0) continue;
+          // Set active league ID for this sport if not already set
+          if (!localStorage.getItem(`espn_leagueId_${s}`)) {
+            localStorage.setItem(`espn_leagueId_${s}`, meta[0].id);
+          }
+          // Merge into leagues array, applying labels
+          const arr = loadSavedLeagues(s);
+          let changed = false;
+          for (const m of meta) {
+            const existing = arr.find(l => l.id === m.id);
+            if (!existing) {
+              arr.push({ id: m.id, ...(m.label ? { label: m.label } : {}) });
+              changed = true;
+            } else if (m.label && existing.label !== m.label) {
+              existing.label = m.label;
+              changed = true;
+            }
+          }
+          if (changed) persistLeagues(s, arr);
+        } catch { /* ignore malformed JSON */ }
       }
 
       // Load leagues state for the active sport after all localStorage updates
@@ -342,20 +369,12 @@ export default function SettingsPage() {
       + `&swid=${encodeURIComponent(swid)}`
       + `&sport=${encodeURIComponent(sport)}`;
 
-    // Extra leagues for current sport (non-active ones)
-    const extraCurrent = savedLeagues.filter(l => l.id !== leagueId).map(l => l.id);
-    if (extraCurrent.length > 0) {
-      url += `&lids_${sport}=${encodeURIComponent(extraCurrent.join(","))}`;
-    }
-
-    // All leagues for other sports
+    // Serialize all leagues for every sport as metadata (id + label) so labels survive the transfer
     for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
-      if (s === sport) continue;
-      const arr = loadSavedLeagues(s);
-      const allIds = arr.map(l => l.id);
-      if (allIds.length > 0) {
-        url += `&lids_${s}=${encodeURIComponent(allIds.join(","))}`;
-      }
+      const arr = s === sport ? savedLeagues : loadSavedLeagues(s);
+      if (arr.length === 0) continue;
+      const meta = arr.map(l => ({ id: l.id, ...(l.label ? { label: l.label } : {}) }));
+      url += `&lmeta_${s}=${encodeURIComponent(JSON.stringify(meta))}`;
     }
     return url;
   }
