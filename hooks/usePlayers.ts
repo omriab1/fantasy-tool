@@ -70,10 +70,17 @@ function parsePlayerEntry(
     const activeSet = new Set(activeSlotIds);
     const seen = new Set<string>();
     const allPos: string[] = [];
-    const mapped = eligibleSlots
+    let mapped = eligibleSlots
       .filter((s) => activeSet.has(s) && s in slotPosMap)
       .map((s) => [s, slotPosMap[s]] as [number, string]);
     mapped.sort(([a], [b]) => a - b);
+    // ESPN display rule: F (slot 3) is the generic forward flex slot.
+    // If the player has any specific forward slot (C=0, LW=1, RW=2), suppress F —
+    // specific positions take precedence over the catch-all. F only shows when
+    // no specific forward slot is available in the league for this player.
+    const SPECIFIC_FWD = new Set([0, 1, 2]);
+    const hasSpecificFwd = mapped.some(([id]) => SPECIFIC_FWD.has(id));
+    if (hasSpecificFwd) mapped = mapped.filter(([id]) => id !== 3);
     for (const [, pos] of mapped) {
       if (!seen.has(pos)) { seen.add(pos); allPos.push(pos); }
     }
