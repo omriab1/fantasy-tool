@@ -95,9 +95,8 @@ const NHL_SLOT_POS: Record<number, string> = {
   3: "F",
   4: "D",
   5: "G",
-  6: "UTIL",
 };
-// BN (7) and IR (8) intentionally omitted — they don't add to the displayed position string.
+// UTIL (6), BN (7) and IR (8) intentionally omitted — they don't add to the displayed position string.
 
 const NHL_POS_MAP: Record<number, string> = {
   1: "C",

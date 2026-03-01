@@ -84,7 +84,7 @@ export default function ComparePage() {
   const sportConfig = SPORT_CONFIGS[sport];
 
   const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid, sport);
-  const { players, loading: playersLoading, error: playersError } = usePlayers(leagueId, espnS2, swid, statsWindow, sport);
+  const { players, loading: playersLoading, error: playersError } = usePlayers(leagueId, espnS2, swid, statsWindow, sport, league?.activeLineupSlotIds);
 
   useEffect(() => {
     if (!league || !swid) return;

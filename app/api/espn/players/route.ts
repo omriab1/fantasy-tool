@@ -73,7 +73,15 @@ export async function GET(req: NextRequest) {
         { status: 502 }
       );
     }
-    return NextResponse.json(data);
+    // Normalize: some ESPN endpoints (e.g. NHL) wrap the player array as { players: [...] }
+    // while others (e.g. NBA) return a bare array. Always return an array to the client.
+    const raw = data as Record<string, unknown> | unknown[];
+    const playersArr = Array.isArray(raw)
+      ? raw
+      : Array.isArray((raw as Record<string, unknown>).players)
+        ? (raw as Record<string, unknown>).players
+        : [];
+    return NextResponse.json(playersArr);
   } catch (err) {
     return NextResponse.json({ error: "Network error reaching ESPN", detail: String(err) }, { status: 502 });
   }

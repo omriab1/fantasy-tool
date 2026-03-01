@@ -118,6 +118,9 @@ export interface LeagueInfo {
   seasonId: number;
   scoringPeriodId: number;
   teams: LeagueTeam[];
+  /** Lineup slot IDs with count > 0 in this league's roster settings.
+   *  Used to filter player position labels to only slots the league actually uses. */
+  activeLineupSlotIds?: number[];
 }
 
 export interface WeeklyTeamStats {
