@@ -701,6 +701,9 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-600">
                 Opening the link on your phone will save credentials automatically.
               </p>
+              <p className="text-xs text-gray-600">
+                * If you rename a league after syncing, re-scan the QR code to update your other devices — or rename it directly on the phone.
+              </p>
             </div>
           </div>
         </div>
