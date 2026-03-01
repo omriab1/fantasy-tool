@@ -114,7 +114,7 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
     if (cachedLeague && cachedSettings) {
       setLeague(cachedLeague);
       // Re-parse config from cached raw settings (functions survive this way)
-      setScoringConfig(parseLeagueScoringConfig(cachedSettings));
+      setScoringConfig(parseLeagueScoringConfig(cachedSettings, sportCfg));
       return;
     }
 
@@ -144,7 +144,7 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
       .then((data: Record<string, unknown>) => {
         const irSlotIds = (SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba).irSlotIds;
         const info   = parseLeagueData(data, irSlotIds);
-        const config = parseLeagueScoringConfig(data.settings);
+        const config = parseLeagueScoringConfig(data.settings, sportCfg);
 
         // Cache league info + raw settings (both are plain JSON — no functions)
         cacheSet(leagueKey,   info);

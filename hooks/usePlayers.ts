@@ -22,6 +22,7 @@ function parsePlayerEntry(
   seasonYear: number,
   slotPosMap: Record<number, string>,
   defaultPosMap: Record<number, string>,
+  gpStatId: number = STAT_IDS.GP,
 ): PlayerStats | null {
   // Structure: { id, player: { fullName, defaultPositionId, proTeamId, stats: [...] } }
   const info = entry.player as Record<string, unknown> | undefined;
@@ -50,7 +51,7 @@ function parsePlayerEntry(
   const raw = (statsEntry.stats ?? {}) as Record<string, number>;
   const get = (id: number) => raw[String(id)] ?? 0;
 
-  const gp = get(STAT_IDS.GP);
+  const gp = get(gpStatId) || get(STAT_IDS.GP);  // hockey GP=30, basketball GP=42
   if (gp === 0) return null;
 
   const posId = (info.defaultPositionId as number) ?? 9;
@@ -152,6 +153,7 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
               parseSeasonYear,
               cfg.slotPosMap,
               cfg.defaultPosMap,
+              cfg.gpStatId ?? STAT_IDS.GP,
             );
             if (stats) parsed.push(stats);
           }

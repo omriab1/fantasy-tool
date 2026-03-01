@@ -1,5 +1,5 @@
-import { DEFAULT_SCORING_CONFIG } from "./scoring-config";
-import type { EspnSport, LeagueScoringConfig, StatsWindow } from "./types";
+import { DEFAULT_SCORING_CONFIG, NHL_STAT_MAP, NHL_DISPLAY_ORDER, NHL_DEFAULT_SCORING_CONFIG } from "./scoring-config";
+import type { EspnSport, LeagueScoringConfig, ScoringCat, StatsWindow } from "./types";
 
 // WNBA is a points-only league on ESPN. This fallback is used when the live
 // league hasn't loaded yet — it ensures the UI shows "Points league" not the
@@ -32,6 +32,13 @@ export interface SportConfig {
   /** lineupSlotIds that represent IR/injured spots — players in these slots are excluded from roster calculations */
   irSlotIds: number[];
   defaultScoringConfig: LeagueScoringConfig;
+  /** Sport-specific stat ID map. Defaults to basketball ESPN_STAT_MAP when omitted. */
+  statMap?: Record<number, ScoringCat>;
+  /** Sport-specific display order for stat categories. Defaults to basketball order when omitted. */
+  statDisplayOrder?: number[];
+  /** ESPN stat ID used to read GP (games played) from raw player stats.
+   *  Basketball = 42, Hockey = 30. Used by usePlayers to filter out zero-GP entries. */
+  gpStatId?: number;
 }
 
 /** Returns the ESPN API URL game segment for a sport config.
@@ -63,7 +70,44 @@ const WNBA_POS_MAP: Record<number, string> = {
   1: "G", 2: "F", 3: "C", 4: "G", 5: "F",  // G/F → G, F/C → F
 };
 
-// Placeholder empty maps for sports not yet fully configured (Phases B/C/D)
+// ── NHL position maps ─────────────────────────────────────────────────────────
+// Confirmed from ESPN Fantasy Hockey API (league 1158022554, season 2026):
+//   defPos=1 (C)  eligible: [3, 0, 6, 7, 8]
+//   defPos=2 (LW) eligible: [3, 1, 6, 7, 8]
+//   defPos=3 (RW) eligible: [3, 2, 6, 7, 8]
+//   defPos=4 (D)  eligible: [4,    6, 7, 8]
+//   defPos=5 (G)  eligible: [5,       7, 8]
+//
+// Slot semantics (derived from eligibleSlots):
+//   0 = C-only slot   (this league has 0 of these — all forward spots use slot 3)
+//   1 = LW-only slot  (0 in this league)
+//   2 = RW-only slot  (0 in this league)
+//   3 = F (C/LW/RW)  — forward flex, 9 spots
+//   4 = D             — 5 spots
+//   5 = G             — 2 spots
+//   6 = UTIL (C/LW/RW/D, not G) — 1 spot
+//   7 = BN (all)      — 5 bench spots
+//   8 = IR (all)      — 1 IR spot
+const NHL_SLOT_POS: Record<number, string> = {
+  0: "C",
+  1: "LW",
+  2: "RW",
+  3: "F",
+  4: "D",
+  5: "G",
+  6: "UTIL",
+};
+// BN (7) and IR (8) intentionally omitted — they don't add to the displayed position string.
+
+const NHL_POS_MAP: Record<number, string> = {
+  1: "C",
+  2: "LW",
+  3: "RW",
+  4: "D",
+  5: "G",
+};
+
+// Placeholder empty maps for sports not yet fully configured (Phases B/D)
 const EMPTY_MAP: Record<number, string> = {};
 
 export const SPORT_CONFIGS: Record<EspnSport, SportConfig> = {
@@ -109,7 +153,7 @@ export const SPORT_CONFIGS: Record<EspnSport, SportConfig> = {
     irSlotIds: [],
     defaultScoringConfig: DEFAULT_SCORING_CONFIG,
   },
-  // NHL — Phase C: fill slotPosMap/defaultPosMap after discovering via /api/espn/debug
+  // NHL — Phase C: fully configured (positions + stat IDs confirmed from live ESPN API)
   fhl: {
     sport: "fhl",
     name: "NHL",
@@ -117,10 +161,13 @@ export const SPORT_CONFIGS: Record<EspnSport, SportConfig> = {
     seasonYear: 2026,
     cdnLeague: "nhl",
     availableWindows: ["season", "30", "15", "7", "proj"],
-    slotPosMap: EMPTY_MAP,
-    defaultPosMap: EMPTY_MAP,
-    irSlotIds: [],
-    defaultScoringConfig: DEFAULT_SCORING_CONFIG,
+    slotPosMap: NHL_SLOT_POS,
+    defaultPosMap: NHL_POS_MAP,
+    irSlotIds: [8],          // slot 8 = IR (all positions eligible, confirmed from eligibleSlots)
+    defaultScoringConfig: NHL_DEFAULT_SCORING_CONFIG,
+    statMap: NHL_STAT_MAP,
+    statDisplayOrder: NHL_DISPLAY_ORDER,
+    gpStatId: 30,            // hockey GP is at stat ID 30 (not 42 like basketball)
   },
   // NFL — Phase D: weekly windows ("3w","2w","1w") and slotPosMap added in Phase D
   ffl: {
