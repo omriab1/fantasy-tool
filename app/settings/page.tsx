@@ -109,9 +109,15 @@ export default function SettingsPage() {
       `});` +
       `var s2=c['espn_s2']||'';` +
       `var sw=c['SWID']||'';` +
-      `var m=location.href.match(/[?&]leagueId=(\\d+)/);` +
+      `var href=location.href;` +
+      `var m=href.match(/[?&]leagueId=(\\d+)/);` +
       `var lid=m?m[1]:'';` +
-      `location.href='${origin}/settings?auto=1&leagueId='+encodeURIComponent(lid)+'&s2='+encodeURIComponent(s2)+'&swid='+encodeURIComponent(sw);` +
+      `var sp='fba';` +
+      `if(href.indexOf('/womens-basketball/')>-1)sp='wnba';` +
+      `else if(href.indexOf('/football/')>-1)sp='ffl';` +
+      `else if(href.indexOf('/baseball/')>-1)sp='flb';` +
+      `else if(href.indexOf('/hockey/')>-1)sp='fhl';` +
+      `location.href='${origin}/settings?auto=1&leagueId='+encodeURIComponent(lid)+'&s2='+encodeURIComponent(s2)+'&swid='+encodeURIComponent(sw)+'&sport='+sp;` +
     `})();`;
     bookmarkRef.current.href = code;
   }, []);
