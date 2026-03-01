@@ -71,6 +71,14 @@ export default function SettingsPage() {
         setSaved(true);
       }
 
+      // Save league IDs for any other sports included in the transfer link (lid_{sport} params)
+      for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
+        const extraLid = params.get(`lid_${s}`);
+        if (extraLid && s !== activeSport) {
+          localStorage.setItem(`espn_leagueId_${s}`, extraLid);
+        }
+      }
+
       // Clean the URL so refreshing doesn't re-trigger
       window.history.replaceState({}, "", "/settings");
     } else {
@@ -175,6 +183,22 @@ export default function SettingsPage() {
     clearCache(lid);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  }
+
+  // Build a transfer URL that includes league IDs for ALL saved sports, not just the current one.
+  // This lets a QR scan or copy-link transfer set up every sport at once on the target device.
+  function buildTransferUrl() {
+    let url = `${window.location.origin}/settings?auto=1`
+      + `&leagueId=${encodeURIComponent(leagueId)}`
+      + `&s2=${encodeURIComponent(espnS2)}`
+      + `&swid=${encodeURIComponent(swid)}`
+      + `&sport=${encodeURIComponent(sport)}`;
+    for (const s of Object.keys(SPORT_CONFIGS) as EspnSport[]) {
+      if (s === sport) continue;
+      const saved = localStorage.getItem(`espn_leagueId_${s}`);
+      if (saved) url += `&lid_${s}=${encodeURIComponent(saved)}`;
+    }
+    return url;
   }
 
   const allAutoDetected = autoResult?.s2 && autoResult?.swid && autoResult?.leagueId;
@@ -374,12 +398,12 @@ export default function SettingsPage() {
         <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 mt-4">
           <h2 className="text-base font-semibold text-white mb-1">Transfer to Phone</h2>
           <p className="text-xs text-gray-500 mb-5">
-            Scan this QR code with your phone camera to open the app with your credentials pre-loaded.
+            Scan this QR code with your phone camera to transfer all your saved league credentials at once.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="bg-white p-3 rounded-xl shrink-0">
               <QRCodeSVG
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}&sport=${encodeURIComponent(sport)}`}
+                value={typeof window !== "undefined" ? buildTransferUrl() : ""}
                 size={160}
               />
             </div>
@@ -387,8 +411,7 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-400">Or copy the link and send it to your phone:</p>
               <button
                 onClick={() => {
-                  const url = `${window.location.origin}/settings?auto=1&leagueId=${encodeURIComponent(leagueId)}&s2=${encodeURIComponent(espnS2)}&swid=${encodeURIComponent(swid)}&sport=${encodeURIComponent(sport)}`;
-                  navigator.clipboard.writeText(url);
+                  navigator.clipboard.writeText(buildTransferUrl());
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2500);
                 }}
