@@ -428,7 +428,7 @@ export default function SettingsPage() {
       {/* League loaded banner — shows scoring config above Quick Connect.
           Uses savedConnectedInfo as instant fallback so it appears on page return
           before the league state has been re-loaded from cache. */}
-      {(league || savedConnectedInfo) && (() => {
+      {(league || (savedConnectedInfo && leagueId && espnS2 && swid)) && (() => {
         const info: ConnectedInfo = league
           ? { label: scoringConfigLabel(scoringConfig), emoji: sportCfg.emoji, name: sportCfg.name }
           : savedConnectedInfo!;
@@ -514,7 +514,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Compact league confirmation — shown between Quick Connect and Manual Setup */}
-      {(league || savedConnectedInfo) && (
+      {(league || (savedConnectedInfo && leagueId && espnS2 && swid)) && (
         <div className="flex items-center gap-2 mb-2 px-1">
           <span className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500/20 text-green-400 text-xs font-bold shrink-0">✓</span>
           <span className="text-xs text-green-400 font-medium">
