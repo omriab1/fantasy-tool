@@ -14,6 +14,10 @@
  *   Suite 13     parseLeagueScoringConfig — categories / points / roto / fallbacks
  *   Suite 14     scoringConfigLabel — human-readable config summary
  *   Suite 15     volume category name extraction (trade page note logic)
+ *   Suite 16     NHL stat map — compute functions, lowerIsBetter flags
+ *   Suite 17     aggregateStats — hockey GP (stat 30) accumulates as raw total
+ *   Suite 18     parseLeagueScoringConfig with NHL sport cfg (sport-specific stat map)
+ *   Suite 19     Hockey position building — active slot filtering + F-suppression rule
  */
 
 let passed = 0;
@@ -647,8 +651,9 @@ function aggregateStatsNew(players, config) {
     for (const [sidStr, val] of Object.entries(p.rawStats)) {
       const sid = parseInt(sidStr, 10);
       if (isNaN(sid)) continue;
-      if (sid === 42) {
-        perGame[42] = (perGame[42] ?? 0) + val;
+      // Basketball GP = stat 42, Hockey GP = stat 30 — both accumulate as raw totals
+      if (sid === 42 || sid === 30) {
+        perGame[sid] = (perGame[sid] ?? 0) + val;
       } else {
         const pgVal = val / gp;
         perGame[sid]        = (perGame[sid]        ?? 0) + pgVal;
@@ -1173,6 +1178,401 @@ console.log("\n─── Suite 15: Volume category name extraction ───");
   const configPoints = { format: "points", cats: [], pointValues: { 0: 1 } };
   assert(volNames(configPoints.cats) === "",
     "points league: no volume cats in empty cats array");
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SUITE 16 — NHL stat map: compute functions and lowerIsBetter flags
+// ══════════════════════════════════════════════════════════════════════════════
+console.log("\n─── Suite 16: NHL stat map — compute functions ───");
+{
+  const safe = (n, d) => d === 0 ? 0 : n / d;
+
+  // Replicate the key NHL_STAT_MAP entries from lib/scoring-config.ts
+  const NHL = {
+    0:  { id: "GS",   compute: (t, gp) => safe(t[0]  ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    1:  { id: "W",    compute: (t, gp) => safe(t[1]  ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    2:  { id: "L",    compute: (t, gp) => safe(t[2]  ?? 0, Math.max(gp, 1)), lowerIsBetter: true  },
+    3:  { id: "SA",   compute: (t, gp) => safe(t[3]  ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    4:  { id: "GA",   compute: (t, gp) => safe(t[4]  ?? 0, Math.max(gp, 1)), lowerIsBetter: true  },
+    6:  { id: "SV",   compute: (t, gp) => safe(t[6]  ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    7:  { id: "SO",   compute: (t, gp) => safe(t[7]  ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    8:  { id: "GTOI", compute: (t, gp) => safe(t[8]  ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    9:  { id: "OTL",  compute: (t, gp) => safe(t[9]  ?? 0, Math.max(gp, 1)), lowerIsBetter: true  },
+    // GAA = GA × 3600 / TOI_sec (volume-weighted across goalies)
+    10: { id: "GAA",  compute: (t) => safe((t[4] ?? 0) * 3600, t[8] ?? 0),            lowerIsBetter: true  },
+    // SV% = SV / SA (volume-weighted)
+    11: { id: "SV%",  compute: (t) => safe(t[6] ?? 0, t[3] ?? 0), lowerIsBetter: false, volumeStatIds: [6, 3] },
+    // W% = W / (W + L + OTL)
+    12: { id: "W%",   compute: (t) => safe(t[1] ?? 0, (t[1]??0)+(t[2]??0)+(t[9]??0)), lowerIsBetter: false },
+    13: { id: "G",    compute: (t, gp) => safe(t[13] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    14: { id: "A",    compute: (t, gp) => safe(t[14] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    15: { id: "+/-",  compute: (t, gp) => safe(t[15] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    16: { id: "PTS",  compute: (t, gp) => safe(t[16] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    17: { id: "PPP",  compute: (t, gp) => safe(t[17] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    24: { id: "FOL",  compute: (t, gp) => safe(t[24] ?? 0, Math.max(gp, 1)), lowerIsBetter: true  },
+    29: { id: "SOG",  compute: (t, gp) => safe(t[29] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    30: { id: "GP",   compute: (t, gp) => safe(t[30] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    32: { id: "HIT",  compute: (t, gp) => safe(t[32] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+    33: { id: "BLK",  compute: (t, gp) => safe(t[33] ?? 0, Math.max(gp, 1)), lowerIsBetter: false },
+  };
+
+  // 16a — Counting stats: per-game division
+  assert(Math.abs(NHL[13].compute({13: 35}, 61) - 35/61) < 0.0001, "G: 35 goals / 61 GP");
+  assert(Math.abs(NHL[14].compute({14: 68}, 61) - 68/61) < 0.0001, "A: 68 assists / 61 GP");
+  assert(Math.abs(NHL[29].compute({29: 228}, 61) - 228/61) < 0.0001, "SOG / GP");
+  assert(Math.abs(NHL[32].compute({32: 23}, 61) - 23/61) < 0.0001,  "HIT / GP");
+
+  // 16b — GAA: confirmed from Vasilevskiy 2025-26 data (GA=85, TOI_sec=138064)
+  const gaaTotals = { 4: 85, 8: 138064 };
+  assert(Math.abs(NHL[10].compute(gaaTotals) - (85*3600/138064)) < 0.00001, "GAA = GA×3600/TOI_sec");
+  assert(Math.abs(NHL[10].compute(gaaTotals) - 2.2164) < 0.001, "GAA ≈ 2.216 (Vasilevskiy season)");
+  assert(NHL[10].lowerIsBetter === true, "GAA: lowerIsBetter=true");
+
+  // 16c — GAA with TOI=0 → 0 (safe division guard)
+  assert(NHL[10].compute({ 4: 10, 8: 0 }) === 0, "GAA with TOI=0 → 0 (safe)");
+
+  // 16d — SV%: confirmed from Vasilevskiy data (SV=924, SA=1009)
+  const svTotals = { 6: 924, 3: 1009 };
+  assert(Math.abs(NHL[11].compute(svTotals) - 924/1009) < 0.00001, "SV% = SV/SA");
+  assert(Math.abs(NHL[11].compute(svTotals) - 0.9158) < 0.001, "SV% ≈ .916 (Vasilevskiy)");
+  assert(NHL[11].lowerIsBetter === false, "SV%: lowerIsBetter=false");
+  assert(Array.isArray(NHL[11].volumeStatIds), "SV% has volumeStatIds");
+  assert(NHL[11].volumeStatIds[0] === 6 && NHL[11].volumeStatIds[1] === 3, "SV% volumeStatIds=[6,3]");
+
+  // 16e — SV% with SA=0 → 0 (no shots faced)
+  assert(NHL[11].compute({ 6: 0, 3: 0 }) === 0, "SV% with SA=0 → 0 (safe)");
+
+  // 16f — W%: W/(W+L+OTL)
+  const wTotals = { 1: 28, 2: 8, 9: 3 };
+  assert(Math.abs(NHL[12].compute(wTotals) - 28/39) < 0.00001, "W% = W/(W+L+OTL)");
+  assert(NHL[12].lowerIsBetter === false, "W%: lowerIsBetter=false");
+
+  // 16g — lowerIsBetter flags: loss/penalty/against stats
+  assert(NHL[2].lowerIsBetter  === true,  "L:   lowerIsBetter=true");
+  assert(NHL[4].lowerIsBetter  === true,  "GA:  lowerIsBetter=true");
+  assert(NHL[9].lowerIsBetter  === true,  "OTL: lowerIsBetter=true");
+  assert(NHL[24].lowerIsBetter === true,  "FOL: lowerIsBetter=true");
+  assert(NHL[1].lowerIsBetter  === false, "W:   lowerIsBetter=false");
+  assert(NHL[7].lowerIsBetter  === false, "SO:  lowerIsBetter=false");
+  assert(NHL[13].lowerIsBetter === false, "G:   lowerIsBetter=false");
+  assert(NHL[17].lowerIsBetter === false, "PPP: lowerIsBetter=false");
+
+  // 16h — GP=0 guard: Math.max(gp,1) prevents division by zero
+  assert(NHL[13].compute({ 13: 10 }, 0) === 10, "G with GP=0 → divides by 1 (guard)");
+  assert(NHL[29].compute({ 29: 5  }, 0) === 5,  "SOG with GP=0 → divides by 1 (guard)");
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SUITE 17 — aggregateStats: hockey GP (stat 30) accumulates as raw total
+// ══════════════════════════════════════════════════════════════════════════════
+console.log("\n─── Suite 17: aggregateStats — hockey GP (stat 30) as raw total ───");
+{
+  const safe = (n, d) => d === 0 ? 0 : n / d;
+  const nhlGP  = { id: "GP",  espnStatId: 30, lowerIsBetter: false, compute: (t, gp) => safe(t[30] ?? 0, Math.max(gp, 1)) };
+  const nhlG   = { id: "G",   espnStatId: 13, lowerIsBetter: false, compute: (t, gp) => safe(t[13] ?? 0, Math.max(gp, 1)) };
+  const nhlGAA = { id: "GAA", espnStatId: 10, lowerIsBetter: true,  compute: (t) => safe((t[4] ?? 0) * 3600, t[8] ?? 0) };
+  const nhlSVP = { id: "SV%", espnStatId: 11, lowerIsBetter: false, compute: (t) => safe(t[6] ?? 0, t[3] ?? 0), volumeStatIds: [6, 3] };
+
+  // 17a — Hockey GP (stat 30) accumulates as raw sum, not divided by gp
+  {
+    const cfgGP = { format: "categories", cats: [nhlGP] };
+    const p1 = { gp: 39, rawStats: { 30: 39 } }; // Vasilevskiy
+    const p2 = { gp: 31, rawStats: { 30: 31 } }; // backup goalie
+    const r = aggregateStatsNew([p1, p2], cfgGP);
+    assert(Math.abs(r["GP"] - 70) < 0.001, "hockey GP (stat 30): raw sum 39+31=70");
+  }
+
+  // 17b — Basketball GP (stat 42) also still accumulates as raw sum (regression)
+  {
+    const bbaGP = { id: "GP", espnStatId: 42, lowerIsBetter: false, compute: (t, gp) => safe(t[42] ?? 0, Math.max(gp, 1)) };
+    const cfgGP = { format: "categories", cats: [bbaGP] };
+    const p1 = { gp: 10, rawStats: { 42: 10 } };
+    const p2 = { gp: 8,  rawStats: { 42: 8  } };
+    const r = aggregateStatsNew([p1, p2], cfgGP);
+    assert(Math.abs(r["GP"] - 18) < 0.001, "basketball GP (stat 42): raw sum 18 (regression)");
+  }
+
+  // 17c — Hockey counting stat (G) is per-game then summed across players
+  {
+    const cfgG = { format: "categories", cats: [nhlG] };
+    // Player A: 35 G / 61 GP = 0.5738/g; Player B: 20 G / 50 GP = 0.400/g
+    const pA = { gp: 61, rawStats: { 13: 35 } };
+    const pB = { gp: 50, rawStats: { 13: 20 } };
+    const r = aggregateStatsNew([pA, pB], cfgG);
+    const expected = 35/61 + 20/50;
+    assert(Math.abs(r["G"] - expected) < 0.0001, "G: per-game sum (35/61 + 20/50)");
+  }
+
+  // 17d — SV% volume-weighted across two goalies
+  {
+    const cfgSVP = { format: "categories", cats: [nhlSVP] };
+    // Goalie A: SV=800, SA=870 → SV%=0.9195
+    // Goalie B: SV=150, SA=175 → SV%=0.8571
+    // Combined (perGame, gp=1 each): SV=800+150=950, SA=870+175=1045 → SV%=950/1045=0.9091
+    const pA = { gp: 50, rawStats: { 6: 800, 3: 870 } };
+    const pB = { gp: 20, rawStats: { 6: 150, 3: 175 } };
+    const r = aggregateStatsNew([pA, pB], cfgSVP);
+    // perGame[6] = 800/50 + 150/20 = 16 + 7.5 = 23.5; perGame[3] = 870/50 + 175/20 = 17.4 + 8.75 = 26.15
+    // SV% = 23.5 / 26.15 = 0.8986
+    const expectedSVP = (800/50 + 150/20) / (870/50 + 175/20);
+    assert(Math.abs(r["SV%"] - expectedSVP) < 0.00001, "SV%: volume-weighted across two goalies");
+  }
+
+  // 17e — GAA volume-weighted across two goalies
+  {
+    const cfgGAA = { format: "categories", cats: [nhlGAA] };
+    // perGame[4] = GA_A/GP_A + GA_B/GP_B; perGame[8] = TOI_A/GP_A + TOI_B/GP_B
+    // GAA = perGame[4] * 3600 / perGame[8]
+    const pA = { gp: 40, rawStats: { 4: 80,  8: 140000 } }; // 2.0 GA/g, ~58.3 min/g
+    const pB = { gp: 20, rawStats: { 4: 60,  8:  68000 } }; // 3.0 GA/g, ~56.7 min/g
+    const r = aggregateStatsNew([pA, pB], cfgGAA);
+    const pgGA  = 80/40  + 60/20;     // 2.0 + 3.0 = 5.0
+    const pgTOI = 140000/40 + 68000/20; // 3500 + 3400 = 6900
+    const expectedGAA = pgGA * 3600 / pgTOI;
+    assert(Math.abs(r["GAA"] - expectedGAA) < 0.00001, "GAA: volume-weighted across two goalies");
+    // Simple average would be (2.0+3.0)/2=2.5; volume-weighted differs
+    assert(Math.abs(r["GAA"] - 2.5) > 0.01, "GAA volume-weighted differs from simple average");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SUITE 18 — parseLeagueScoringConfig with NHL sport cfg
+// ══════════════════════════════════════════════════════════════════════════════
+console.log("\n─── Suite 18: parseLeagueScoringConfig with NHL sport cfg ───");
+{
+  // Replicate the sport-cfg-aware parseLeagueScoringConfig (the cfg parameter added for hockey)
+  const safe = (n, d) => d === 0 ? 0 : n / d;
+
+  const NHL_STAT_MAP_TEST = {
+    1:  { id: "W",   espnStatId: 1,  lowerIsBetter: false, compute: (t, gp) => safe(t[1]  ?? 0, Math.max(gp, 1)) },
+    2:  { id: "L",   espnStatId: 2,  lowerIsBetter: true,  compute: (t, gp) => safe(t[2]  ?? 0, Math.max(gp, 1)) },
+    7:  { id: "SO",  espnStatId: 7,  lowerIsBetter: false, compute: (t, gp) => safe(t[7]  ?? 0, Math.max(gp, 1)) },
+    9:  { id: "OTL", espnStatId: 9,  lowerIsBetter: true,  compute: (t, gp) => safe(t[9]  ?? 0, Math.max(gp, 1)) },
+    10: { id: "GAA", espnStatId: 10, lowerIsBetter: true,  compute: (t) => safe((t[4] ?? 0) * 3600, t[8] ?? 0) },
+    11: { id: "SV%", espnStatId: 11, lowerIsBetter: false, compute: (t) => safe(t[6] ?? 0, t[3] ?? 0), volumeStatIds: [6, 3] },
+    13: { id: "G",   espnStatId: 13, lowerIsBetter: false, compute: (t, gp) => safe(t[13] ?? 0, Math.max(gp, 1)) },
+    14: { id: "A",   espnStatId: 14, lowerIsBetter: false, compute: (t, gp) => safe(t[14] ?? 0, Math.max(gp, 1)) },
+    15: { id: "+/-", espnStatId: 15, lowerIsBetter: false, compute: (t, gp) => safe(t[15] ?? 0, Math.max(gp, 1)) },
+    17: { id: "PPP", espnStatId: 17, lowerIsBetter: false, compute: (t, gp) => safe(t[17] ?? 0, Math.max(gp, 1)) },
+    29: { id: "SOG", espnStatId: 29, lowerIsBetter: false, compute: (t, gp) => safe(t[29] ?? 0, Math.max(gp, 1)) },
+    32: { id: "HIT", espnStatId: 32, lowerIsBetter: false, compute: (t, gp) => safe(t[32] ?? 0, Math.max(gp, 1)) },
+  };
+
+  // NHL_DISPLAY_ORDER: skater stats (13,14,15,17,29,32) before goalie stats (1,10,11,7)
+  const NHL_DISPLAY_ORDER_TEST = [13, 14, 15, 17, 29, 32, 1, 2, 9, 10, 11, 7];
+  const NHL_DEFAULT_TEST = {
+    format: "categories",
+    cats: [NHL_STAT_MAP_TEST[13], NHL_STAT_MAP_TEST[14], NHL_STAT_MAP_TEST[15],
+           NHL_STAT_MAP_TEST[17], NHL_STAT_MAP_TEST[29], NHL_STAT_MAP_TEST[32],
+           NHL_STAT_MAP_TEST[1],  NHL_STAT_MAP_TEST[10], NHL_STAT_MAP_TEST[11], NHL_STAT_MAP_TEST[7]],
+    pointValues: {},
+  };
+
+  function parseLeagueScoringConfigWithSport(settings, cfg) {
+    const statMap      = cfg?.statMap      ?? ESPN_STAT_MAP_TEST;
+    const displayOrder = cfg?.statDisplayOrder ?? [];
+    const fallback     = cfg?.defaultScoringConfig ?? DEFAULT_SCORING_CONFIG_TEST;
+    const localRank = (id) => { const i = displayOrder.indexOf(id); return i === -1 ? 999 : i; };
+
+    if (!settings || typeof settings !== "object") return fallback;
+    const s = settings;
+    const scoringSettings = s.scoringSettings;
+    if (!scoringSettings) return fallback;
+    const scoringItems = scoringSettings.scoringItems;
+    if (!Array.isArray(scoringItems) || scoringItems.length === 0) return fallback;
+
+    const scoringType = scoringSettings.scoringType ?? s.scoringType ?? "";
+    const typeLower   = scoringType.toLowerCase();
+    const isPoints    = typeLower.includes("point") && !typeLower.includes("categor");
+    const isRoto      = typeLower.includes("roto") || typeLower.includes("rotisserie");
+
+    if (isPoints) {
+      const pointValues = {};
+      const cats = [];
+      for (const item of scoringItems) {
+        const statId = typeof item.statId === "number" ? item.statId : parseInt(String(item.statId), 10);
+        const pts    = typeof item.points === "number" ? item.points : 0;
+        if (isNaN(statId) || pts === 0) continue;
+        pointValues[statId] = pts;
+        const cat = statMap[statId];
+        if (cat) cats.push(cat);
+      }
+      if (cats.length === 0) return fallback;
+      cats.sort((a, b) => localRank(a.espnStatId) - localRank(b.espnStatId));
+      return { format: "points", cats, pointValues };
+    }
+
+    const cats = [];
+    for (const item of scoringItems) {
+      const statId = typeof item.statId === "number" ? item.statId : parseInt(String(item.statId), 10);
+      if (isNaN(statId)) continue;
+      const cat = statMap[statId];
+      if (!cat) continue;
+      const reverse = item.isReverseItem === true;
+      cats.push(reverse !== cat.lowerIsBetter ? { ...cat, lowerIsBetter: reverse } : cat);
+    }
+    if (cats.length < 2) return fallback;
+    cats.sort((a, b) => localRank(a.espnStatId) - localRank(b.espnStatId));
+    return { format: isRoto ? "roto" : "categories", cats };
+  }
+
+  const nhlCfg = { statMap: NHL_STAT_MAP_TEST, statDisplayOrder: NHL_DISPLAY_ORDER_TEST, defaultScoringConfig: NHL_DEFAULT_TEST };
+
+  // 18a — null settings → NHL default (not basketball default)
+  {
+    const r = parseLeagueScoringConfigWithSport(null, nhlCfg);
+    assert(r.format === "categories", "NHL: null settings → NHL default (categories)");
+    assert(r.cats.length === 10,      "NHL: null settings → 10-cat NHL default");
+    assert(r.cats[0].id === "G",      "NHL default: first cat is G (skater first)");
+  }
+
+  // 18b — H2H categories with hockey stats; sorted by NHL_DISPLAY_ORDER (skaters before goalies)
+  {
+    const settings = {
+      scoringSettings: {
+        scoringType: "H2H_MOST_CATEGORIES",
+        scoringItems: [
+          { statId: 10, isReverseItem: true  }, // GAA  (goalie)
+          { statId: 13, isReverseItem: false }, // G    (skater)
+          { statId: 11, isReverseItem: false }, // SV%  (goalie)
+          { statId: 29, isReverseItem: false }, // SOG  (skater)
+        ],
+      },
+    };
+    const r = parseLeagueScoringConfigWithSport(settings, nhlCfg);
+    assert(r.format === "categories",             "NHL H2H: format=categories");
+    assert(r.cats.length === 4,                   "NHL H2H: 4 cats parsed");
+    assert(r.cats[0].id === "G",                  "NHL H2H: G first (skater, rank 0)");
+    assert(r.cats[1].id === "SOG",                "NHL H2H: SOG second (skater, rank 4)");
+    assert(r.cats[2].id === "GAA",                "NHL H2H: GAA third (goalie)");
+    assert(r.cats[3].id === "SV%",                "NHL H2H: SV% last (goalie)");
+    assert(r.cats.find(c => c.id==="GAA")?.lowerIsBetter === true,  "GAA: lowerIsBetter=true");
+    assert(r.cats.find(c => c.id==="SV%")?.lowerIsBetter === false, "SV%: lowerIsBetter=false");
+  }
+
+  // 18c — Unknown hockey stat ID skipped; basketball stat IDs not in NHL map also skipped
+  {
+    const settings = {
+      scoringSettings: {
+        scoringType: "H2H_MOST_CATEGORIES",
+        scoringItems: [
+          { statId: 13, isReverseItem: false }, // G (hockey) — known
+          { statId: 0,  isReverseItem: false }, // PTS (basketball) — NOT in NHL_STAT_MAP → skip
+          { statId: 29, isReverseItem: false }, // SOG — known
+        ],
+      },
+    };
+    const r = parseLeagueScoringConfigWithSport(settings, nhlCfg);
+    assert(r.cats.length === 2,                  "NHL: basketball stat (PTS/0) skipped — 2 cats");
+    assert(!r.cats.find(c => c.id === "PTS"),    "NHL: no PTS in hockey parse result");
+  }
+
+  // 18d — Without cfg (basketball defaults used for basketball call)
+  {
+    const settings = {
+      scoringSettings: {
+        scoringType: "H2H_MOST_CATEGORIES",
+        scoringItems: [
+          { statId: 0,  isReverseItem: false }, // PTS (basketball)
+          { statId: 6,  isReverseItem: false }, // REB
+        ],
+      },
+    };
+    const r = parseLeagueScoringConfigWithSport(settings, undefined);
+    assert(r.cats.find(c => c.id === "PTS") !== undefined, "no cfg: basketball PTS parsed");
+    assert(r.cats.find(c => c.id === "REB") !== undefined, "no cfg: basketball REB parsed");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SUITE 19 — Hockey position building: active slot filter + F-suppression
+// ══════════════════════════════════════════════════════════════════════════════
+console.log("\n─── Suite 19: Hockey position building ───");
+{
+  // Replicate the hockey position-building logic from hooks/usePlayers.ts
+  const NHL_SLOT_POS = { 0: "C", 1: "LW", 2: "RW", 3: "F", 4: "D", 5: "G" };
+
+  function buildHockeyPosition(eligibleSlots, activeSlotIds) {
+    const activeSet = new Set(activeSlotIds);
+    let mapped = eligibleSlots
+      .filter(s => activeSet.has(s) && s in NHL_SLOT_POS)
+      .map(s => [s, NHL_SLOT_POS[s]]);
+    mapped.sort(([a], [b]) => a - b);
+    // F-suppression: if player has any specific forward slot (C/LW/RW), hide generic F
+    const SPECIFIC_FWD = new Set([0, 1, 2]);
+    const hasSpecificFwd = mapped.some(([id]) => SPECIFIC_FWD.has(id));
+    if (hasSpecificFwd) mapped = mapped.filter(([id]) => id !== 3);
+    const seen = new Set();
+    const allPos = [];
+    for (const [, pos] of mapped) {
+      if (!seen.has(pos)) { seen.add(pos); allPos.push(pos); }
+    }
+    return allPos.length > 0 ? allPos.join(", ") : "UT";
+  }
+
+  // All-positions league: slots {0(C), 1(LW), 2(RW), 3(F), 4(D), 5(G), 6(UTIL), 7(BN), 8(IR)}
+  const ALL_SLOTS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+  // 19a — Center (eligible [3,0,6,7,8]) in all-positions league: F suppressed → "C"
+  assert(buildHockeyPosition([3,0,6,7,8], ALL_SLOTS) === "C",
+    "all-pos league: center shows C (F suppressed)");
+
+  // 19b — LW (eligible [3,1,6,7,8]) in all-positions league: F suppressed → "LW"
+  assert(buildHockeyPosition([3,1,6,7,8], ALL_SLOTS) === "LW",
+    "all-pos league: LW shows LW (F suppressed)");
+
+  // 19c — RW (eligible [3,2,6,7,8]) in all-positions league: F suppressed → "RW"
+  assert(buildHockeyPosition([3,2,6,7,8], ALL_SLOTS) === "RW",
+    "all-pos league: RW shows RW (F suppressed)");
+
+  // 19d — Player eligible LW+RW (e.g. Matt Boldy): eligible [3,1,2,6,7,8] → "LW, RW"
+  assert(buildHockeyPosition([3,1,2,6,7,8], ALL_SLOTS) === "LW, RW",
+    "all-pos league: LW+RW player shows 'LW, RW' (F suppressed)");
+
+  // 19e — Defenseman (eligible [4,6,7,8]) in all-positions league: "D"
+  assert(buildHockeyPosition([4,6,7,8], ALL_SLOTS) === "D",
+    "all-pos league: D shows D");
+
+  // 19f — Goalie (eligible [5,7,8]) in all-positions league: "G"
+  assert(buildHockeyPosition([5,7,8], ALL_SLOTS) === "G",
+    "all-pos league: G shows G");
+
+  // F-only league: no C(0)/LW(1)/RW(2) slots — only {3(F), 4(D), 5(G), 7(BN), 8(IR)}
+  const F_ONLY_SLOTS = [3, 4, 5, 7, 8];
+
+  // 19g — Center in F-only league: slot 0 not active → F not suppressed → "F"
+  assert(buildHockeyPosition([3,0,6,7,8], F_ONLY_SLOTS) === "F",
+    "F-only league: center shows F");
+
+  // 19h — LW in F-only league: slot 1 not active → F not suppressed → "F"
+  assert(buildHockeyPosition([3,1,6,7,8], F_ONLY_SLOTS) === "F",
+    "F-only league: LW shows F");
+
+  // 19i — LW+RW eligible in F-only league: slots 1,2 not active → "F"
+  assert(buildHockeyPosition([3,1,2,6,7,8], F_ONLY_SLOTS) === "F",
+    "F-only league: LW+RW player shows F");
+
+  // 19j — D in F-only league: unaffected → "D"
+  assert(buildHockeyPosition([4,6,7,8], F_ONLY_SLOTS) === "D",
+    "F-only league: D shows D");
+
+  // 19k — G in F-only league: unaffected → "G"
+  assert(buildHockeyPosition([5,7,8], F_ONLY_SLOTS) === "G",
+    "F-only league: G shows G");
+
+  // 19l — Slot ordering matches ESPN's canonical order (C=0 < LW=1 < RW=2 < F=3 < D=4 < G=5)
+  // Player eligible for both D and G (unusual): should show "D, G"
+  assert(buildHockeyPosition([4,5,7,8], ALL_SLOTS) === "D, G",
+    "slot ordering: D (4) before G (5)");
+
+  // 19m — UTIL (slot 6) excluded from NHL_SLOT_POS → never appears in position string
+  assert(buildHockeyPosition([3,1,6,7,8], ALL_SLOTS) === "LW",
+    "UTIL slot 6 excluded from position display");
+
+  // 19n — No matching active slots → "UT" fallback
+  const EMPTY_SLOTS = [7, 8]; // only BN and IR
+  assert(buildHockeyPosition([3,1,6,7,8], EMPTY_SLOTS) === "UT",
+    "no matching active slots → UT fallback");
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
