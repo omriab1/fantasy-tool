@@ -61,6 +61,17 @@ function parseLeagueData(data: Record<string, unknown>, irSlotIds: number[]): Le
     };
   });
 
+  // Extract active lineup slot IDs (count > 0) so position parsing can be league-specific.
+  const slotCounts = (
+    ((data.settings as Record<string, unknown>)?.rosterSettings as Record<string, unknown>)
+      ?.lineupSlotCounts
+  ) as Record<string, number> | undefined;
+  const activeLineupSlotIds = slotCounts
+    ? Object.entries(slotCounts)
+        .filter(([, count]) => count > 0)
+        .map(([id]) => Number(id))
+    : undefined;
+
   return {
     leagueId: String(data.id ?? ""),
     seasonId: (data.seasonId as number) ?? 2026,
@@ -68,6 +79,7 @@ function parseLeagueData(data: Record<string, unknown>, irSlotIds: number[]): Le
       ?? (data.scoringPeriodId as number)
       ?? 1,
     teams,
+    activeLineupSlotIds,
   };
 }
 
@@ -91,16 +103,17 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
     // v11 bumped to force re-fetch with irSlotIds expanded to [13, 20, 21].
     // LeagueScoringConfig contains functions which cannot be JSON-serialised,
     // so we cache the plain settings object and re-parse on every restore.
-    const leagueKey   = cacheKey("league",   leagueId, `${sport}_mTeam_v11`);
+    const leagueKey   = cacheKey("league",   leagueId, `${sport}_mTeam_v12`);
     const settingsKey = cacheKey("settings",  leagueId, `${sport}_v1`);
 
     // Remove all previous cache versions so they don't accumulate in localStorage
     if (typeof window !== "undefined") {
       for (const oldKey of [
         "mTeam_v3", "mTeam_v4", "mTeam_v5", "mTeam_v6", "mTeam_v7",
-        "mTeam_v8", "mTeam_v9", "mTeam_v10",
+        "mTeam_v8", "mTeam_v9", "mTeam_v10", "mTeam_v11",
         `${sport}_mTeam_v3`, `${sport}_mTeam_v4`, `${sport}_mTeam_v5`, `${sport}_mTeam_v6`,
         `${sport}_mTeam_v7`, `${sport}_mTeam_v8`, `${sport}_mTeam_v9`, `${sport}_mTeam_v10`,
+        `${sport}_mTeam_v11`,
       ]) {
         localStorage.removeItem(cacheKey("league", leagueId, oldKey));
       }
@@ -114,7 +127,7 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
     if (cachedLeague && cachedSettings) {
       setLeague(cachedLeague);
       // Re-parse config from cached raw settings (functions survive this way)
-      setScoringConfig(parseLeagueScoringConfig(cachedSettings));
+      setScoringConfig(parseLeagueScoringConfig(cachedSettings, sportCfg));
       return;
     }
 
@@ -144,7 +157,7 @@ export function useLeague(leagueId: string, espnS2: string, swid: string, sport:
       .then((data: Record<string, unknown>) => {
         const irSlotIds = (SPORT_CONFIGS[sport] ?? SPORT_CONFIGS.fba).irSlotIds;
         const info   = parseLeagueData(data, irSlotIds);
-        const config = parseLeagueScoringConfig(data.settings);
+        const config = parseLeagueScoringConfig(data.settings, sportCfg);
 
         // Cache league info + raw settings (both are plain JSON — no functions)
         cacheSet(leagueKey,   info);

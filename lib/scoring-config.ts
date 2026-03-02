@@ -2,6 +2,123 @@ import type { ScoringCat, LeagueScoringConfig } from "./types";
 
 const safe = (n: number, d: number) => (d === 0 ? 0 : n / d);
 
+// ─── NHL Hockey Stat Map ───────────────────────────────────────────────────────
+// Stat IDs discovered from live ESPN Fantasy Hockey API (league 1158022554, season 2026).
+// Goalie stats 0-12 are completely different from basketball's 0-12.
+// Confirmation method: cross-referenced raw values against known NHL player stats.
+//
+// Display order for the UI — controls row order in trade/compare/power pages.
+// Skater stats first, then goalie stats (matches ESPN's typical category order).
+export const NHL_DISPLAY_ORDER: number[] = [
+  13, 14, 16,         // G, A, PTS
+  15,                 // +/-
+  31,                 // PIM
+  17, 18,             // PPP, SHP
+  19, 20, 21, 22,     // GWG, OTG, SHG, SHA (uncertain IDs)
+  29,                 // SOG
+  32, 33,             // HIT, BLK
+  23, 24,             // FOW, FOL
+  25, 26, 27,         // TOI stats
+  35, 36, 37, 38, 39, // misc skater (uncertain)
+  30,                 // GP (skater/goalie shared)
+  0,                  // GS (goalie games started)
+  1, 2, 9,            // W, L, OTL
+  3, 4, 10, 6, 11, 7, 8, 12, // SA, GA, GAA, SV, SV%, SO, TOI, W%
+  5, 28,              // unknown / rarely used
+];
+
+const nhlRank = (espnStatId: number): number => {
+  const idx = NHL_DISPLAY_ORDER.indexOf(espnStatId);
+  return idx === -1 ? 999 : idx;
+};
+
+/**
+ * ESPN Fantasy Hockey stat ID map.
+ * IDs confirmed from live ESPN API response for an NHL fantasy league (season 2026).
+ *
+ * GOALIE stats (IDs 0–12):
+ *   Confirmed: GS(0), W(1), L(2), SA(3), GA(4), SV(6), SO(7), TOI_sec(8), OTL(9), GAA(10), SV%(11), W%(12)
+ *   Unknown:   5 (isReverseItem=true in scoring settings, not present in player data — possibly Bad Starts)
+ *
+ * SKATER stats (IDs 13+):
+ *   Confirmed: G(13), A(14), PTS(16), FOW(23), FOL(24), SOG(29), HIT(32), BLK(33), GP(30)
+ *   Hypothesis: +/-(15), PPP(17), SHP(18), PIM(31), GWG(19), TOI_min(25)
+ *   Uncertain:  20, 21, 22 (very small values), 26, 27 (TOI variants), 28, 35–39
+ */
+export const NHL_STAT_MAP: Record<number, ScoringCat> = {
+  // ── Goalie — counting stats ──────────────────────────────────────────────
+  0:  { id: "GS",   espnStatId: 0,  lowerIsBetter: false, compute: (t, gp) => safe(t[0]  ?? 0, Math.max(gp, 1)) },
+  1:  { id: "W",    espnStatId: 1,  lowerIsBetter: false, compute: (t, gp) => safe(t[1]  ?? 0, Math.max(gp, 1)) },
+  2:  { id: "L",    espnStatId: 2,  lowerIsBetter: true,  compute: (t, gp) => safe(t[2]  ?? 0, Math.max(gp, 1)) },
+  3:  { id: "SA",   espnStatId: 3,  lowerIsBetter: false, compute: (t, gp) => safe(t[3]  ?? 0, Math.max(gp, 1)) },
+  4:  { id: "GA",   espnStatId: 4,  lowerIsBetter: true,  compute: (t, gp) => safe(t[4]  ?? 0, Math.max(gp, 1)) },
+  5:  { id: "BS",   espnStatId: 5,  lowerIsBetter: true,  compute: (t, gp) => safe(t[5]  ?? 0, Math.max(gp, 1)) },
+  6:  { id: "SV",   espnStatId: 6,  lowerIsBetter: false, compute: (t, gp) => safe(t[6]  ?? 0, Math.max(gp, 1)) },
+  7:  { id: "SO",   espnStatId: 7,  lowerIsBetter: false, compute: (t, gp) => safe(t[7]  ?? 0, Math.max(gp, 1)) },
+  // TOI in seconds (raw total per goalie) — per-game avg shown when gp > 1
+  8:  { id: "GTOI", espnStatId: 8,  lowerIsBetter: false, compute: (t, gp) => safe(t[8]  ?? 0, Math.max(gp, 1)) },
+  9:  { id: "OTL",  espnStatId: 9,  lowerIsBetter: true,  compute: (t, gp) => safe(t[9]  ?? 0, Math.max(gp, 1)) },
+  // GAA = GA × 3600 / TOI_sec (volume-weighted across multiple goalies)
+  10: { id: "GAA",  espnStatId: 10, lowerIsBetter: true,  compute: (t) => safe((t[4] ?? 0) * 3600, t[8] ?? 0) },
+  // SV% = SV / SA (volume-weighted)
+  11: { id: "SV%",  espnStatId: 11, lowerIsBetter: false, compute: (t) => safe(t[6] ?? 0, t[3] ?? 0), volumeStatIds: [6, 3] as const },
+  // W% = W / (W + L + OTL)
+  12: { id: "W%",   espnStatId: 12, lowerIsBetter: false, compute: (t) => safe(t[1] ?? 0, (t[1] ?? 0) + (t[2] ?? 0) + (t[9] ?? 0)) },
+
+  // ── Skater — confirmed ───────────────────────────────────────────────────
+  13: { id: "G",    espnStatId: 13, lowerIsBetter: false, compute: (t, gp) => safe(t[13] ?? 0, Math.max(gp, 1)) },
+  14: { id: "A",    espnStatId: 14, lowerIsBetter: false, compute: (t, gp) => safe(t[14] ?? 0, Math.max(gp, 1)) },
+  16: { id: "PTS",  espnStatId: 16, lowerIsBetter: false, compute: (t, gp) => safe(t[16] ?? 0, Math.max(gp, 1)) },
+  23: { id: "FOW",  espnStatId: 23, lowerIsBetter: false, compute: (t, gp) => safe(t[23] ?? 0, Math.max(gp, 1)) },
+  24: { id: "FOL",  espnStatId: 24, lowerIsBetter: true,  compute: (t, gp) => safe(t[24] ?? 0, Math.max(gp, 1)) },
+  29: { id: "SOG",  espnStatId: 29, lowerIsBetter: false, compute: (t, gp) => safe(t[29] ?? 0, Math.max(gp, 1)) },
+  30: { id: "GP",   espnStatId: 30, lowerIsBetter: false, compute: (t, gp) => safe(t[30] ?? 0, Math.max(gp, 1)) },
+  32: { id: "HIT",  espnStatId: 32, lowerIsBetter: false, compute: (t, gp) => safe(t[32] ?? 0, Math.max(gp, 1)) },
+  33: { id: "BLK",  espnStatId: 33, lowerIsBetter: false, compute: (t, gp) => safe(t[33] ?? 0, Math.max(gp, 1)) },
+
+  // ── Skater — high-confidence hypothesis ─────────────────────────────────
+  15: { id: "+/-",  espnStatId: 15, lowerIsBetter: false, compute: (t, gp) => safe(t[15] ?? 0, Math.max(gp, 1)) },
+  17: { id: "PPP",  espnStatId: 17, lowerIsBetter: false, compute: (t, gp) => safe(t[17] ?? 0, Math.max(gp, 1)) },
+  18: { id: "SHP",  espnStatId: 18, lowerIsBetter: false, compute: (t, gp) => safe(t[18] ?? 0, Math.max(gp, 1)) },
+  25: { id: "TOI",  espnStatId: 25, lowerIsBetter: false, compute: (t, gp) => safe(t[25] ?? 0, Math.max(gp, 1)) },
+  31: { id: "PIM",  espnStatId: 31, lowerIsBetter: false, compute: (t, gp) => safe(t[31] ?? 0, Math.max(gp, 1)) },
+
+  // ── Skater — uncertain (best-guess labels, values correct numerically) ───
+  19: { id: "GWG",  espnStatId: 19, lowerIsBetter: false, compute: (t, gp) => safe(t[19] ?? 0, Math.max(gp, 1)) },
+  20: { id: "OTG",  espnStatId: 20, lowerIsBetter: false, compute: (t, gp) => safe(t[20] ?? 0, Math.max(gp, 1)) },
+  21: { id: "SHG",  espnStatId: 21, lowerIsBetter: false, compute: (t, gp) => safe(t[21] ?? 0, Math.max(gp, 1)) },
+  22: { id: "SHA",  espnStatId: 22, lowerIsBetter: false, compute: (t, gp) => safe(t[22] ?? 0, Math.max(gp, 1)) },
+  26: { id: "TOIs", espnStatId: 26, lowerIsBetter: false, compute: (t, gp) => safe(t[26] ?? 0, Math.max(gp, 1)) },
+  27: { id: "aTOI", espnStatId: 27, lowerIsBetter: false, compute: (t, gp) => safe(t[27] ?? 0, Math.max(gp, 1)) },
+  28: { id: "UNK",  espnStatId: 28, lowerIsBetter: false, compute: (t, gp) => safe(t[28] ?? 0, Math.max(gp, 1)) },
+  35: { id: "FW",   espnStatId: 35, lowerIsBetter: false, compute: (t, gp) => safe(t[35] ?? 0, Math.max(gp, 1)) },
+  36: { id: "FL",   espnStatId: 36, lowerIsBetter: false, compute: (t, gp) => safe(t[36] ?? 0, Math.max(gp, 1)) },
+  37: { id: "STK1", espnStatId: 37, lowerIsBetter: false, compute: (t, gp) => safe(t[37] ?? 0, Math.max(gp, 1)) },
+  38: { id: "STK2", espnStatId: 38, lowerIsBetter: false, compute: (t, gp) => safe(t[38] ?? 0, Math.max(gp, 1)) },
+  39: { id: "MISC", espnStatId: 39, lowerIsBetter: false, compute: (t, gp) => safe(t[39] ?? 0, Math.max(gp, 1)) },
+};
+
+/**
+ * Default fallback scoring config for NHL leagues.
+ * Classic 10-cat H2H: G, A, +/-, PPP, SOG, HIT, W, GAA, SV%, SO
+ */
+export const NHL_DEFAULT_SCORING_CONFIG: LeagueScoringConfig = {
+  format: "categories",
+  cats: [
+    NHL_STAT_MAP[13],  // G
+    NHL_STAT_MAP[14],  // A
+    NHL_STAT_MAP[15],  // +/-
+    NHL_STAT_MAP[17],  // PPP
+    NHL_STAT_MAP[29],  // SOG
+    NHL_STAT_MAP[32],  // HIT
+    NHL_STAT_MAP[1],   // W
+    NHL_STAT_MAP[10],  // GAA (lowerIsBetter)
+    NHL_STAT_MAP[11],  // SV%
+    NHL_STAT_MAP[7],   // SO
+  ],
+  pointValues: {},
+};
+
 /**
  * ESPN UI display order for stat IDs — controls the row order shown in the app.
  *
@@ -133,7 +250,7 @@ export function scoringConfigLabel(config: LeagueScoringConfig): string {
 
 /**
  * Parses ESPN league settings → LeagueScoringConfig.
- * Falls back to DEFAULT_SCORING_CONFIG on any parse failure.
+ * Falls back to DEFAULT_SCORING_CONFIG (or cfg.defaultScoringConfig) on any parse failure.
  *
  * Confirmed ESPN field names (season 2026):
  *   settings.scoringSettings.scoringType  — e.g. "H2H_MOST_CATEGORIES", "H2H_POINTS", "ROTO"
@@ -141,16 +258,31 @@ export function scoringConfigLabel(config: LeagueScoringConfig): string {
  *
  * IMPORTANT: In H2H categories leagues every scoringItem carries "points": 1 — NOT a points
  * league signal. Format is determined by scoringType only.
+ *
+ * @param cfg  Optional sport config — provides the stat map and display order for the sport.
+ *             Falls back to basketball defaults when omitted (NBA / WNBA).
  */
-export function parseLeagueScoringConfig(settings: unknown): LeagueScoringConfig {
-  if (!settings || typeof settings !== "object") return DEFAULT_SCORING_CONFIG;
+export function parseLeagueScoringConfig(
+  settings: unknown,
+  cfg?: { statMap?: Record<number, ScoringCat>; statDisplayOrder?: number[]; defaultScoringConfig?: LeagueScoringConfig },
+): LeagueScoringConfig {
+  const statMap       = cfg?.statMap       ?? ESPN_STAT_MAP;
+  const displayOrder  = cfg?.statDisplayOrder ?? ESPN_DISPLAY_ORDER;
+  const fallbackConfig = cfg?.defaultScoringConfig ?? DEFAULT_SCORING_CONFIG;
+
+  const localRank = (id: number) => {
+    const idx = displayOrder.indexOf(id);
+    return idx === -1 ? 999 : idx;
+  };
+
+  if (!settings || typeof settings !== "object") return fallbackConfig;
   const s = settings as Record<string, unknown>;
 
   const scoringSettings = s.scoringSettings as Record<string, unknown> | undefined;
-  if (!scoringSettings) return DEFAULT_SCORING_CONFIG;
+  if (!scoringSettings) return fallbackConfig;
 
   const scoringItems = scoringSettings.scoringItems as unknown[] | undefined;
-  if (!Array.isArray(scoringItems) || scoringItems.length === 0) return DEFAULT_SCORING_CONFIG;
+  if (!Array.isArray(scoringItems) || scoringItems.length === 0) return fallbackConfig;
 
   const scoringType =
     (scoringSettings.scoringType as string | undefined) ??
@@ -170,11 +302,11 @@ export function parseLeagueScoringConfig(settings: unknown): LeagueScoringConfig
       const pts    = typeof it.points === "number"  ? it.points  : 0;
       if (isNaN(statId) || pts === 0) continue;
       pointValues[statId] = pts;
-      const cat = ESPN_STAT_MAP[statId];
+      const cat = statMap[statId];
       if (cat) cats.push(cat);
     }
-    if (cats.length === 0) return DEFAULT_SCORING_CONFIG;
-    cats.sort((a, b) => displayRank(a.espnStatId) - displayRank(b.espnStatId));
+    if (cats.length === 0) return fallbackConfig;
+    cats.sort((a, b) => localRank(a.espnStatId) - localRank(b.espnStatId));
     return { format: "points", cats, pointValues };
   }
 
@@ -185,21 +317,21 @@ export function parseLeagueScoringConfig(settings: unknown): LeagueScoringConfig
     const statId = typeof it.statId === "number" ? it.statId : parseInt(String(it.statId), 10);
     if (isNaN(statId)) continue;
 
-    const cat = ESPN_STAT_MAP[statId];
+    const cat = statMap[statId];
     if (!cat) {
       // Unknown stat ID — open browser DevTools console to identify missing categories.
       console.warn(`[fantasy-tool] Unknown ESPN stat ID ${statId} — category skipped.`);
       continue;
     }
 
-    // isReverseItem = true means lower is better (e.g. TO, TF).
+    // isReverseItem = true means lower is better (e.g. TO, GA, L).
     // Only override when it differs from the map default.
     const reverse = it.isReverseItem === true;
     cats.push(reverse !== cat.lowerIsBetter ? { ...cat, lowerIsBetter: reverse } : cat);
   }
 
-  if (cats.length < 2) return DEFAULT_SCORING_CONFIG;
+  if (cats.length < 2) return fallbackConfig;
 
-  cats.sort((a, b) => displayRank(a.espnStatId) - displayRank(b.espnStatId));
+  cats.sort((a, b) => localRank(a.espnStatId) - localRank(b.espnStatId));
   return { format: isRoto ? "roto" : "categories", cats };
 }

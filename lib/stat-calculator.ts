@@ -49,10 +49,11 @@ export function aggregateStats(players: PlayerStats[], config: LeagueScoringConf
     for (const [sidStr, val] of Object.entries(p.rawStats ?? {})) {
       const sid = parseInt(sidStr, 10);
       if (isNaN(sid)) continue;
-      // GP (stat 42): rawStats[42] = p.gp, so dividing by gp would always give 1.
+      // GP stats: rawStats[gpId] = p.gp, so dividing by gp would always give 1.
       // Accumulate as raw total so compute(perGame, 1) returns the actual sum of games played.
-      if (sid === 42) {
-        perGame[42] = (perGame[42] ?? 0) + (val as number);
+      // Basketball GP = stat 42; Hockey GP = stat 30.
+      if (sid === 42 || sid === 30) {
+        perGame[sid] = (perGame[sid] ?? 0) + (val as number);
       } else {
         const pgVal = (val as number) / gp;
         perGame[sid] = (perGame[sid] ?? 0) + pgVal;

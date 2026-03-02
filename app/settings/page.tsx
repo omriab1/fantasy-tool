@@ -20,8 +20,8 @@ const SPORT_URL_HINTS: Record<EspnSport, string> = {
 };
 
 // Only sports that are fully supported — others shown as "coming soon"
-const ACTIVE_SPORTS: EspnSport[] = ["fba", "wnba"];
-const COMING_SOON_SPORTS: EspnSport[] = ["flb", "fhl", "ffl"];
+const ACTIVE_SPORTS: EspnSport[] = ["fba", "wnba", "fhl"];
+const COMING_SOON_SPORTS: EspnSport[] = ["flb", "ffl"];
 
 // ── Multi-league helpers (module-level, no React deps) ─────────────────────
 

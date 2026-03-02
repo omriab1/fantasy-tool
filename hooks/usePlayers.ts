@@ -22,6 +22,8 @@ function parsePlayerEntry(
   seasonYear: number,
   slotPosMap: Record<number, string>,
   defaultPosMap: Record<number, string>,
+  gpStatId: number = STAT_IDS.GP,
+  activeSlotIds?: number[],
 ): PlayerStats | null {
   // Structure: { id, player: { fullName, defaultPositionId, proTeamId, stats: [...] } }
   const info = entry.player as Record<string, unknown> | undefined;
@@ -50,24 +52,50 @@ function parsePlayerEntry(
   const raw = (statsEntry.stats ?? {}) as Record<string, number>;
   const get = (id: number) => raw[String(id)] ?? 0;
 
-  const gp = get(STAT_IDS.GP);
+  const gp = get(gpStatId) || get(STAT_IDS.GP);  // hockey GP=30, basketball GP=42
   if (gp === 0) return null;
 
   const posId = (info.defaultPositionId as number) ?? 9;
 
-  // Build position string: default position first (ESPN shows it first), then other eligible positions
-  const defaultPosName = defaultPosMap[posId] ?? null;
   const eligibleSlots =
     (info.eligibleSlots as number[] | undefined) ??
     (entry.eligibleSlots as number[] | undefined) ??
     [];
-  const otherPos = [...new Set(
-    eligibleSlots
-      .filter((s) => s in slotPosMap && slotPosMap[s] !== defaultPosName)
-      .map((s) => slotPosMap[s])
-  )];
-  const allPos = defaultPosName ? [defaultPosName, ...otherPos] : otherPos;
-  const position = allPos.length > 0 ? allPos.join(", ") : "UT";
+
+  let position: string;
+  if (activeSlotIds) {
+    // Hockey (slot-based leagues): show only the positions that exist in this league's roster.
+    // Filter eligible slots to those active in the league AND mapped to a display position,
+    // then sort by slot ID to match ESPN's canonical position ordering (C→LW→RW→F→D→G).
+    const activeSet = new Set(activeSlotIds);
+    const seen = new Set<string>();
+    const allPos: string[] = [];
+    let mapped = eligibleSlots
+      .filter((s) => activeSet.has(s) && s in slotPosMap)
+      .map((s) => [s, slotPosMap[s]] as [number, string]);
+    mapped.sort(([a], [b]) => a - b);
+    // ESPN display rule: F (slot 3) is the generic forward flex slot.
+    // If the player has any specific forward slot (C=0, LW=1, RW=2), suppress F —
+    // specific positions take precedence over the catch-all. F only shows when
+    // no specific forward slot is available in the league for this player.
+    const SPECIFIC_FWD = new Set([0, 1, 2]);
+    const hasSpecificFwd = mapped.some(([id]) => SPECIFIC_FWD.has(id));
+    if (hasSpecificFwd) mapped = mapped.filter(([id]) => id !== 3);
+    for (const [, pos] of mapped) {
+      if (!seen.has(pos)) { seen.add(pos); allPos.push(pos); }
+    }
+    position = allPos.length > 0 ? allPos.join(", ") : "UT";
+  } else {
+    // Basketball / other sports: default position first, then other eligible positions.
+    const defaultPosName = defaultPosMap[posId] ?? null;
+    const otherPos = [...new Set(
+      eligibleSlots
+        .filter((s) => s in slotPosMap && slotPosMap[s] !== defaultPosName)
+        .map((s) => slotPosMap[s])
+    )];
+    const allPos = defaultPosName ? [defaultPosName, ...otherPos] : otherPos;
+    position = allPos.length > 0 ? allPos.join(", ") : "UT";
+  }
 
   return {
     playerId: (entry.id as number) ?? 0,
@@ -94,7 +122,14 @@ function parsePlayerEntry(
   };
 }
 
-export function usePlayers(leagueId: string, espnS2: string, swid: string, window: StatsWindow, sport: EspnSport = "fba") {
+export function usePlayers(
+  leagueId: string,
+  espnS2: string,
+  swid: string,
+  window: StatsWindow,
+  sport: EspnSport = "fba",
+  activeSlotIds?: number[],
+) {
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,18 +138,28 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
   // Use statsFallbackYear for stat parsing when available (e.g. WNBA in off-season).
   const parseSeasonYear = cfg.statsFallbackYear ?? cfg.seasonYear;
 
+  // For hockey, position labels depend on which lineup slots the league uses.
+  // Wait until we know the active slots before fetching so positions are correct.
+  // Stable string key so array identity changes don't cause infinite re-fetches.
+  const needsSlots = sport === "fhl";
+  const slotKey = activeSlotIds ? [...activeSlotIds].sort((a, b) => a - b).join(",") : "";
+  const ready = !needsSlots || slotKey !== "";
+
+  // Cache suffix encodes the active slots so each league gets slot-specific cached positions.
+  const cacheSuffix = slotKey ? `_s${slotKey}` : "";
+
   // When the window changes and data is already cached, switch instantly without a fetch.
   useEffect(() => {
-    if (!leagueId || !espnS2 || !swid) return;
-    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v6", leagueId, `${sport}_${window}`));
+    if (!leagueId || !espnS2 || !swid || !ready) return;
+    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v7", leagueId, `${sport}_${window}${cacheSuffix}`));
     if (cached) setPlayers(cached);
-  }, [leagueId, espnS2, swid, window, sport]);
+  }, [leagueId, espnS2, swid, window, sport, ready, cacheSuffix]);
 
   const load = useCallback(() => {
-    if (!leagueId || !espnS2 || !swid) return;
+    if (!leagueId || !espnS2 || !swid || !ready) return;
 
     // If the requested window is already cached, show it immediately (no spinner).
-    const key = cacheKey("players_v6", leagueId, `${sport}_${window}`);
+    const key = cacheKey("players_v7", leagueId, `${sport}_${window}${cacheSuffix}`);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);
@@ -143,6 +188,7 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
       .then((data: unknown) => {
         const arr = Array.isArray(data) ? data : [];
         // Parse and cache ALL available windows from this single response so switching is instant.
+        const slots = slotKey ? activeSlotIds : undefined;
         for (const w of cfg.availableWindows) {
           const parsed: PlayerStats[] = [];
           for (const p of arr) {
@@ -152,16 +198,18 @@ export function usePlayers(leagueId: string, espnS2: string, swid: string, windo
               parseSeasonYear,
               cfg.slotPosMap,
               cfg.defaultPosMap,
+              cfg.gpStatId ?? STAT_IDS.GP,
+              slots,
             );
             if (stats) parsed.push(stats);
           }
-          cacheSet(cacheKey("players_v6", leagueId, `${sport}_${w}`), parsed);
+          cacheSet(cacheKey("players_v7", leagueId, `${sport}_${w}${cacheSuffix}`), parsed);
           if (w === window) setPlayers(parsed);
         }
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [leagueId, espnS2, swid, window, sport, cfg, parseSeasonYear]);
+  }, [leagueId, espnS2, swid, window, sport, cfg, parseSeasonYear, ready, cacheSuffix, slotKey, activeSlotIds]);
 
   useEffect(() => {
     load();

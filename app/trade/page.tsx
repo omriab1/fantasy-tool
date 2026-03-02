@@ -47,8 +47,8 @@ export default function TradePage() {
   const sportConfig = SPORT_CONFIGS[sport];
 
   // scoringConfig is auto-detected from league settings
-  const { scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
-  const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow, sport);
+  const { league, scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
+  const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow, sport, league?.activeLineupSlotIds);
 
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
