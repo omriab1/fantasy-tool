@@ -9,6 +9,7 @@ const TABS = [
   { lines: ["Trade", "Analyzer"], href: "/trade" },
   { lines: ["Compare", "Teams"],  href: "/compare" },
   { lines: ["Power", "Ranking"],  href: "/power" },
+  { lines: ["AI", "Coach"],       href: "/coach" },
   { lines: ["Settings"],          href: "/settings" },
 ];
 
