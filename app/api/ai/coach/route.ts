@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { AI_DEFAULT_MODELS } from "@/lib/ai-providers";
 import type { AIProvider, CoachRequest, CoachResponse } from "@/lib/types";
 
+function friendlyError(status: number, message: string): Error {
+  if (status === 429) {
+    return new Error("Rate limit reached — too many requests at once. Wait 30 seconds and click Refresh.");
+  }
+  if (status === 401 || status === 403) {
+    return new Error("Invalid API key. Double-check your key in Settings.");
+  }
+  return new Error(message || `HTTP ${status}`);
+}
+
 async function callOpenAICompat(
   baseUrl: string,
   apiKey: string,
@@ -32,7 +42,7 @@ async function callOpenAICompat(
   };
 
   if (!res.ok) {
-    throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+    throw friendlyError(res.status, data.error?.message ?? `HTTP ${res.status}`);
   }
 
   const text = data.choices?.[0]?.message?.content;
@@ -68,7 +78,7 @@ async function callAnthropic(
   };
 
   if (!res.ok) {
-    throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+    throw friendlyError(res.status, data.error?.message ?? `HTTP ${res.status}`);
   }
 
   const text = data.content?.[0]?.text;
