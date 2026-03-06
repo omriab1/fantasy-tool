@@ -180,7 +180,6 @@ export interface EspnPlayerInfo {
 
 // ─── AI Coach types ────────────────────────────────────────────────────────────
 
-export type AIProvider = "openai" | "gemini" | "anthropic" | "groq";
 export type CoachAdviceType = "weekly" | "daily" | "trade";
 
 export interface CoachAdvice {
@@ -193,9 +192,6 @@ export interface CoachAdvice {
 }
 
 export interface CoachRequest {
-  provider: AIProvider;
-  apiKey: string;
-  model?: string;
   adviceType: CoachAdviceType;
   systemPrompt: string;
   userPrompt: string;

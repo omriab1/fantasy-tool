@@ -6,8 +6,7 @@ import { clearCache } from "@/lib/espn-cache";
 import { useLeague } from "@/hooks/useLeague";
 import { scoringConfigLabel } from "@/lib/scoring-config";
 import { SPORT_CONFIGS } from "@/lib/sports-config";
-import { AI_PROVIDERS, AI_PROVIDER_LABELS, AI_DEFAULT_MODELS, AI_PROVIDER_KEY_URLS } from "@/lib/ai-providers";
-import type { EspnSport, SavedLeague, AIProvider } from "@/lib/types";
+import type { EspnSport, SavedLeague } from "@/lib/types";
 
 type ConnectedInfo = { label: string; emoji: string; name: string };
 
@@ -80,16 +79,6 @@ export default function SettingsPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const bookmarkRef = useRef<HTMLAnchorElement>(null);
   const leagueDropdownRef = useRef<HTMLDivElement>(null);
-
-  // AI Coach settings
-  const [aiProvider, setAiProvider] = useState<AIProvider>("openai");
-  const [aiApiKey, setAiApiKey]     = useState("");
-  const [aiModel, setAiModel]       = useState("");
-  const [showAiKey, setShowAiKey]   = useState(false);
-  const [aiSaved, setAiSaved]       = useState(false);
-  const [aiTesting, setAiTesting]   = useState(false);
-  const [aiTestResult, setAiTestResult] = useState<"ok" | "fail" | null>(null);
-  const [aiTestError, setAiTestError]   = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -209,10 +198,6 @@ export default function SettingsPage() {
       setSavedLeagues(loadSavedLeagues(validSport));
     }
 
-    // AI Coach settings (always loaded, independent of ESPN sport)
-    setAiProvider((localStorage.getItem("ai_provider") as AIProvider | null) ?? "openai");
-    setAiApiKey(localStorage.getItem("ai_api_key") ?? "");
-    setAiModel(localStorage.getItem("ai_model") ?? "");
   }, []);
 
   // When sport changes: load that sport's saved leagueId and immediately persist the sport
@@ -351,49 +336,6 @@ export default function SettingsPage() {
     clearCache(lid);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
-  }
-
-  function handleSaveAI() {
-    localStorage.setItem("ai_provider", aiProvider);
-    localStorage.setItem("ai_api_key", aiApiKey);
-    if (aiModel.trim()) {
-      localStorage.setItem("ai_model", aiModel.trim());
-    } else {
-      localStorage.removeItem("ai_model");
-    }
-    window.dispatchEvent(new Event("espn-settings-changed"));
-    setAiSaved(true);
-    setTimeout(() => setAiSaved(false), 2500);
-  }
-
-  async function handleTestAI() {
-    setAiTesting(true);
-    setAiTestResult(null);
-    setAiTestError(null);
-    try {
-      const res = await fetch("/api/ai/coach", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: aiProvider,
-          apiKey: aiApiKey,
-          model: aiModel || undefined,
-          adviceType: "daily",
-          systemPrompt: "Reply with: 1. Connection OK",
-          userPrompt: "Test.",
-        }),
-      });
-      const data = await res.json() as { insights?: string[]; error?: string };
-      if (!res.ok || !data.insights?.length) {
-        throw new Error(data.error ?? "No insights returned");
-      }
-      setAiTestResult("ok");
-    } catch (e) {
-      setAiTestResult("fail");
-      setAiTestError((e as Error).message);
-    } finally {
-      setAiTesting(false);
-    }
   }
 
   function activateLeague(id: string) {
@@ -801,108 +743,6 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
-
-      {/* ── AI Coach ──────────────────────────────────────── */}
-      <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 mt-4">
-        <h2 className="text-base font-semibold text-white mb-1">AI Coach</h2>
-        <p className="text-xs text-gray-500 mb-5">
-          Connect an AI provider to get weekly matchup advice, daily waiver pickup recommendations,
-          and trade ideas. Your key is stored only in your browser and never sent to our servers
-          except to proxy to the AI provider.
-        </p>
-
-        <div className="flex flex-col gap-5">
-          {/* Provider pills */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-white">Provider</label>
-            <div className="flex flex-wrap gap-2 mt-1">
-              {AI_PROVIDERS.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setAiProvider(p)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    aiProvider === p
-                      ? "bg-[#e8193c] border-[#e8193c] text-white"
-                      : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
-                  }`}
-                >
-                  {AI_PROVIDER_LABELS[p]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* API Key */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-white">API Key</label>
-            <p className="text-xs text-gray-500">
-              Get your key from{" "}
-              <span className="text-gray-400">{AI_PROVIDER_KEY_URLS[aiProvider]}</span>
-            </p>
-            <div className="relative">
-              <input
-                type={showAiKey ? "text" : "password"}
-                value={aiApiKey}
-                onChange={(e) => setAiApiKey(e.target.value)}
-                placeholder="Paste your API key here…"
-                className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 pr-16 text-sm text-white font-mono placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
-              />
-              <button
-                type="button"
-                onClick={() => setShowAiKey((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                {showAiKey ? "Hide" : "Show"}
-              </button>
-            </div>
-          </div>
-
-          {/* Model override */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-white">
-              Model{" "}
-              <span className="text-gray-500 font-normal">(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={aiModel}
-              onChange={(e) => setAiModel(e.target.value)}
-              placeholder={`Default: ${AI_DEFAULT_MODELS[aiProvider]}`}
-              className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
-            />
-          </div>
-
-          {/* Test result banners */}
-          {aiTestResult === "ok" && (
-            <div className="bg-green-500/10 border border-green-500/25 rounded-lg p-3 text-sm text-green-300">
-              Connection successful ✓
-            </div>
-          )}
-          {aiTestResult === "fail" && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-300">
-              Connection failed: {aiTestError}
-            </div>
-          )}
-
-          {/* Buttons */}
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={handleTestAI}
-              disabled={!aiApiKey || aiTesting}
-              className="border border-white/10 text-gray-300 hover:text-white hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed font-medium py-2 px-5 rounded-lg text-sm transition-colors"
-            >
-              {aiTesting ? "Testing…" : "Test Connection"}
-            </button>
-            <button
-              onClick={handleSaveAI}
-              disabled={!aiApiKey}
-              className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 px-6 rounded-lg text-sm transition-colors"
-            >
-              {aiSaved ? "Saved ✓" : "Save AI Settings"}
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* ── Manual cookie guide (collapsible) ──────────────── */}
       <details className="mt-4 group">

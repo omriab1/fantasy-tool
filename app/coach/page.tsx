@@ -14,11 +14,9 @@ import {
   buildTradePrompt,
   rankFreeAgents,
 } from "@/lib/coach-prompts";
-import { AI_PROVIDERS, AI_PROVIDER_LABELS, AI_DEFAULT_MODELS, AI_PROVIDER_FULL_URLS, AI_PROVIDER_DESCRIPTIONS } from "@/lib/ai-providers";
 import { SPORT_CONFIGS } from "@/lib/sports-config";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type {
-  AIProvider,
   CoachAdvice,
   CoachResponse,
   EspnSport,
@@ -48,115 +46,6 @@ function getDailyCache(leagueId: string, sport: string): CoachAdvice | null {
 
 function setCoachCache(key: string, advice: CoachAdvice): void {
   try { localStorage.setItem(key, JSON.stringify(advice)); } catch { /* QuotaExceeded — skip */ }
-}
-
-// ─── Inline AI setup (shown when no API key is configured) ────────────────────
-
-function InlineAISetup({ onSave }: { onSave: (provider: AIProvider, key: string) => void }) {
-  const [provider, setProvider] = useState<AIProvider>("openai");
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-
-  function handleSave() {
-    if (!apiKey.trim()) return;
-    localStorage.setItem("ai_provider", provider);
-    localStorage.setItem("ai_api_key", apiKey.trim());
-    window.dispatchEvent(new Event("espn-settings-changed"));
-    onSave(provider, apiKey.trim());
-  }
-
-  return (
-    <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden mb-2">
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-white/8">
-        <p className="text-sm font-semibold text-white">Connect AI Provider</p>
-        <p className="text-xs text-gray-500 mt-0.5">
-          One-time setup — your key is saved in your browser.{" "}
-          <Link href="/settings" className="text-gray-400 hover:text-white underline">Full settings →</Link>
-        </p>
-      </div>
-
-      <div className="px-5 py-4 flex flex-col gap-4">
-        {/* Step 1: Pick provider */}
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Step 1 — Choose a provider
-          </p>
-          <div className="flex flex-col gap-2">
-            {AI_PROVIDERS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setProvider(p)}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm border transition-colors text-left ${
-                  provider === p
-                    ? "bg-[#e8193c]/10 border-[#e8193c]/50 text-white"
-                    : "border-white/8 text-gray-400 hover:text-white hover:border-white/15"
-                }`}
-              >
-                <span className="font-medium">{AI_PROVIDER_LABELS[p]}</span>
-                <span className={`text-xs ${provider === p ? "text-gray-400" : "text-gray-600"}`}>
-                  {AI_PROVIDER_DESCRIPTIONS[p]}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Step 2: Get key */}
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Step 2 — Get your API key
-          </p>
-          <a
-            href={AI_PROVIDER_FULL_URLS[provider]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-white/10 text-sm text-gray-300 hover:text-white hover:border-white/25 transition-colors"
-          >
-            <span>🔑</span>
-            <span>Open {AI_PROVIDER_LABELS[provider]} API keys page</span>
-            <span className="ml-auto text-gray-600 text-xs">↗</span>
-          </a>
-          <p className="text-xs text-gray-600 mt-1.5 pl-1">
-            Sign in → create a new key → copy it → paste below
-          </p>
-        </div>
-
-        {/* Step 3: Paste and save */}
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Step 3 — Paste and save
-          </p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                placeholder="Paste your API key here…"
-                className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 pr-14 text-sm text-white font-mono placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600 hover:text-gray-400 transition-colors"
-              >
-                {showKey ? "Hide" : "Show"}
-              </button>
-            </div>
-            <button
-              onClick={handleSave}
-              disabled={!apiKey.trim()}
-              className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shrink-0"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -293,11 +182,6 @@ export default function CoachPage() {
   const [swid, setSwid]         = useState("");
   const [sport, setSport]       = useState<EspnSport>("fba");
 
-  // AI settings
-  const [aiProvider, setAiProvider] = useState<AIProvider>("openai");
-  const [aiApiKey, setAiApiKey]     = useState("");
-  const [aiModel, setAiModel]       = useState("");
-
   // Weekly advice
   const [weeklyAdvice, setWeeklyAdvice]   = useState<CoachAdvice | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
@@ -334,9 +218,6 @@ export default function CoachPage() {
       );
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
-      setAiProvider((localStorage.getItem("ai_provider") as AIProvider | null) ?? "openai");
-      setAiApiKey(localStorage.getItem("ai_api_key") ?? "");
-      setAiModel(localStorage.getItem("ai_model") ?? "");
     }
     readSettings();
     window.addEventListener("espn-settings-changed", readSettings);
@@ -352,7 +233,7 @@ export default function CoachPage() {
 
   const sportCfg = SPORT_CONFIGS[sport];
   const cdnLeague = sportCfg?.cdnLeague ?? "nba";
-  const dataReady = !!league && players.length > 0 && !!aiApiKey && !!leagueId;
+  const dataReady = !!league && players.length > 0 && !!leagueId;
 
   // ── AI call helper ────────────────────────────────────────────────────────
 
@@ -366,14 +247,7 @@ export default function CoachPage() {
       method: "POST",
       signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider: aiProvider,
-        apiKey: aiApiKey,
-        model: aiModel || undefined,
-        adviceType,
-        systemPrompt,
-        userPrompt,
-      }),
+      body: JSON.stringify({ adviceType, systemPrompt, userPrompt }),
     });
     const data = (await res.json()) as CoachResponse;
     if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
@@ -433,7 +307,7 @@ export default function CoachPage() {
   // ── Fetch weekly advice ───────────────────────────────────────────────────
 
   const fetchWeeklyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
-    if (weeklyBusy.current || !league || !aiApiKey) return;
+    if (weeklyBusy.current || !league) return;
     weeklyBusy.current = true;
     setWeeklyLoading(true);
     setWeeklyError(null);
@@ -476,12 +350,12 @@ export default function CoachPage() {
       weeklyBusy.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, aiApiKey, aiProvider, aiModel, espnS2, swid]);
+  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid]);
 
   // ── Fetch daily advice ────────────────────────────────────────────────────
 
   const fetchDailyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
-    if (dailyBusy.current || !league || !aiApiKey) return;
+    if (dailyBusy.current || !league) return;
     dailyBusy.current = true;
     setDailyLoading(true);
     setDailyError(null);
@@ -571,12 +445,12 @@ export default function CoachPage() {
       dailyBusy.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, aiApiKey, aiProvider, aiModel, espnS2, swid]);
+  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid]);
 
   // ── Fetch trade advice ────────────────────────────────────────────────────
 
   const fetchTradeAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
-    if (tradeBusy.current || !league || !aiApiKey) return;
+    if (tradeBusy.current || !league) return;
     tradeBusy.current = true;
     setTradeLoading(true);
     setTradeError(null);
@@ -676,7 +550,7 @@ export default function CoachPage() {
       tradeBusy.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, aiApiKey, aiProvider, aiModel, swid]);
+  }, [league, players, scoringConfig, leagueId, sport, swid]);
 
   // ── Auto-fetch on mount (weekly → daily → trade, strictly sequential) ──────
   // Sequential ensures only one AI request is in-flight at a time,
@@ -730,20 +604,7 @@ export default function CoachPage() {
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
       <div className="mb-2">
         <h1 className="text-xl font-bold text-white">AI Coach</h1>
-        {aiApiKey && (
-          <p className="text-xs text-gray-600 mt-0.5">
-            Powered by {AI_PROVIDER_LABELS[aiProvider]}{" "}
-            · {aiModel || AI_DEFAULT_MODELS[aiProvider]}
-          </p>
-        )}
       </div>
-
-      {/* Inline AI setup */}
-      {!aiApiKey && (
-        <InlineAISetup
-          onSave={(p, k) => { setAiProvider(p); setAiApiKey(k); }}
-        />
-      )}
 
       {/* ESPN not connected */}
       {!hasEspnCreds && (

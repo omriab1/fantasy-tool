@@ -1,27 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AI_DEFAULT_MODELS } from "@/lib/ai-providers";
-import type { AIProvider, CoachRequest, CoachResponse } from "@/lib/types";
+import type { CoachRequest, CoachResponse } from "@/lib/types";
+
+const GROQ_BASE  = "https://api.groq.com/openai/v1";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 function friendlyError(status: number, message: string): Error {
-  if (status === 429) {
-    return new Error("Rate limit reached — you've hit the provider's per-minute limit. Wait 60 seconds and try again.");
-  }
-  if (status === 401 || status === 403) {
-    return new Error("Invalid API key. Double-check your key in Settings.");
-  }
+  if (status === 429) return new Error("Rate limit reached. Wait 60 seconds and try again.");
+  if (status === 401 || status === 403) return new Error("AI provider rejected the request — contact the site owner.");
   return new Error(message || `HTTP ${status}`);
 }
 
-async function callOpenAICompat(
-  baseUrl: string,
+async function callGroq(
   apiKey: string,
-  model: string,
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
   signal?: AbortSignal
 ): Promise<string> {
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await fetch(`${GROQ_BASE}/chat/completions`, {
     method: "POST",
     signal,
     headers: {
@@ -29,11 +25,11 @@ async function callOpenAICompat(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: GROQ_MODEL,
       max_tokens: maxTokens,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        { role: "user",   content: userPrompt },
       ],
     }),
   });
@@ -43,50 +39,9 @@ async function callOpenAICompat(
     error?: { message?: string };
   };
 
-  if (!res.ok) {
-    throw friendlyError(res.status, data.error?.message ?? `HTTP ${res.status}`);
-  }
-
+  if (!res.ok) throw friendlyError(res.status, data.error?.message ?? `HTTP ${res.status}`);
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Empty response from AI provider");
-  return text;
-}
-
-async function callAnthropic(
-  apiKey: string,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number,
-  signal?: AbortSignal
-): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    signal,
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
-
-  const data = (await res.json()) as {
-    content?: Array<{ text?: string }>;
-    error?: { message?: string };
-  };
-
-  if (!res.ok) {
-    throw friendlyError(res.status, data.error?.message ?? `HTTP ${res.status}`);
-  }
-
-  const text = data.content?.[0]?.text;
-  if (!text) throw new Error("Empty response from Anthropic");
+  if (!text) throw new Error("Empty response from AI");
   return text;
 }
 
@@ -101,15 +56,18 @@ function parseInsights(raw: string): string[] {
 
   if (lines.length > 0) return lines;
 
-  // Fallback: split by double newline (paragraphs)
-  return raw
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .slice(0, 5);
+  return raw.split(/\n\n+/).map((p) => p.trim()).filter(Boolean).slice(0, 5);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse<CoachResponse>> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { insights: [], error: "AI Coach is not configured on this server." },
+      { status: 503 }
+    );
+  }
+
   let body: CoachRequest;
   try {
     body = (await req.json()) as CoachRequest;
@@ -117,57 +75,16 @@ export async function POST(req: NextRequest): Promise<NextResponse<CoachResponse
     return NextResponse.json({ insights: [], error: "Invalid request body" }, { status: 400 });
   }
 
-  const { provider, apiKey, model, adviceType, systemPrompt, userPrompt } = body;
-
-  if (!apiKey) {
-    return NextResponse.json({ insights: [], error: "Missing API key" }, { status: 400 });
-  }
+  const { adviceType, systemPrompt, userPrompt } = body;
   if (!systemPrompt || !userPrompt) {
     return NextResponse.json({ insights: [], error: "Missing prompts" }, { status: 400 });
   }
 
-  const resolvedModel = model?.trim() || AI_DEFAULT_MODELS[provider as AIProvider] || "gpt-4o-mini";
   const maxTokens = adviceType === "daily" ? 800 : 1200;
-  const signal = req.signal;
 
   try {
-    let raw: string;
-
-    switch (provider as AIProvider) {
-      case "openai":
-        raw = await callOpenAICompat(
-          "https://api.openai.com/v1",
-          apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal
-        );
-        break;
-
-      case "groq":
-        raw = await callOpenAICompat(
-          "https://api.groq.com/openai/v1",
-          apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal
-        );
-        break;
-
-      case "gemini":
-        raw = await callOpenAICompat(
-          "https://generativelanguage.googleapis.com/v1beta/openai",
-          apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal
-        );
-        break;
-
-      case "anthropic":
-        raw = await callAnthropic(apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal);
-        break;
-
-      default:
-        return NextResponse.json(
-          { insights: [], error: `Unknown provider: ${provider}` },
-          { status: 400 }
-        );
-    }
-
-    const insights = parseInsights(raw);
-    return NextResponse.json({ insights });
+    const raw = await callGroq(apiKey, systemPrompt, userPrompt, maxTokens, req.signal);
+    return NextResponse.json({ insights: parseInsights(raw) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ insights: [], error: message }, { status: 502 });
