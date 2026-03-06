@@ -319,16 +319,21 @@ export default function CoachPage() {
         if (cached) { setWeeklyAdvice(cached); return; }
       }
 
-      const { myTeam, opponentName, myStats, opponentStats, currentPeriod } =
+      const { myTeam, opponentTeam, opponentName, myStats, opponentStats, currentPeriod } =
         await fetchMatchupData(league, scoringConfig, players);
+
+      const myRosterPlayers = players.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
+      const oppRosterPlayers = players.filter((p) => opponentTeam?.rosterPlayerIds.includes(p.playerId));
 
       const systemPrompt = buildSystemPrompt("weekly");
       const userPrompt = buildWeeklyPrompt({
         sportName: sportCfg.name,
         scoringConfig,
         myTeamName: myTeam.name,
+        myRoster: myRosterPlayers.map((p) => p.playerName),
         myStats,
         opponentName,
+        opponentRoster: oppRosterPlayers.map((p) => p.playerName),
         opponentStats,
       });
 
@@ -386,6 +391,7 @@ export default function CoachPage() {
       // Build free agent list
       const ownedIds = new Set(league.teams.flatMap((t) => t.rosterPlayerIds));
       const freeAgents = players.filter((p) => !ownedIds.has(p.playerId));
+      const myRosterPlayers = players.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
 
       // Rank free agents by matchup relevance
       const ranked = rankFreeAgents(freeAgents, myStats, opponentStats, scoringConfig);
@@ -403,6 +409,7 @@ export default function CoachPage() {
         sportName: sportCfg.name,
         scoringConfig,
         myTeamName: myTeam.name,
+        myRoster: myRosterPlayers.map((p) => ({ name: p.playerName, position: p.position })),
         myStats,
         opponentName,
         opponentStats,
