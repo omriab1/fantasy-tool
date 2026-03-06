@@ -378,9 +378,9 @@ export default function SettingsPage() {
           provider: aiProvider,
           apiKey: aiApiKey,
           model: aiModel || undefined,
-          adviceType: "weekly",
-          systemPrompt: "You are a test assistant. Respond with exactly 1 numbered insight.",
-          userPrompt: "Test connection. Provide 1 numbered insight saying the connection works.",
+          adviceType: "daily",
+          systemPrompt: "Reply with: 1. Connection OK",
+          userPrompt: "Test.",
         }),
       });
       const data = await res.json() as { insights?: string[]; error?: string };

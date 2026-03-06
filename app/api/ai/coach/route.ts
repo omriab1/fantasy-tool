@@ -4,7 +4,7 @@ import type { AIProvider, CoachRequest, CoachResponse } from "@/lib/types";
 
 function friendlyError(status: number, message: string): Error {
   if (status === 429) {
-    return new Error("Rate limit reached — too many requests at once. Wait 30 seconds and click Refresh.");
+    return new Error("Rate limit reached — you've hit the provider's per-minute limit. Wait 60 seconds and try again.");
   }
   if (status === 401 || status === 403) {
     return new Error("Invalid API key. Double-check your key in Settings.");

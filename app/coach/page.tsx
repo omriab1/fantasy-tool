@@ -685,16 +685,23 @@ export default function CoachPage() {
 
     const period = league!.scoringPeriodId;
 
+    let cancelled = false;
+
     async function runSequential() {
       // Weekly — cache check first to avoid loading flash
       const wCached = getWeeklyCache(leagueId, sport, period, "weekly");
       if (wCached) setWeeklyAdvice(wCached);
       else await fetchWeeklyAdvice();
 
+      // Stop if user navigated away before next request
+      if (cancelled) return;
+
       // Daily — only starts after weekly fully completes
       const dCached = getDailyCache(leagueId, sport);
       if (dCached) setDailyAdvice(dCached);
       else await fetchDailyAdvice();
+
+      if (cancelled) return;
 
       // Trade — only starts after daily fully completes
       const tCached = getWeeklyCache(leagueId, sport, period, "trade");
@@ -703,6 +710,7 @@ export default function CoachPage() {
     }
 
     runSequential();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataReady, leagueId, sport, league, fetchWeeklyAdvice, fetchDailyAdvice, fetchTradeAdvice]);
 
