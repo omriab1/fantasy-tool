@@ -674,6 +674,8 @@ export default function CoachPage() {
   }, [league, players, scoringConfig, leagueId, sport, aiApiKey, aiProvider, aiModel, swid]);
 
   // ── Auto-fetch on mount (weekly + daily + trade) ─────────────────────────
+  // Staggered to avoid hitting free-tier rate limits (e.g. Gemini 15 RPM).
+  // Cached results are shown instantly; only uncached fetches are delayed.
 
   useEffect(() => {
     if (!dataReady || weeklyAutoFetched.current) return;
@@ -688,7 +690,8 @@ export default function CoachPage() {
     dailyAutoFetched.current = true;
     const cached = getDailyCache(leagueId, sport);
     if (cached) { setDailyAdvice(cached); return; }
-    fetchDailyAdvice();
+    const t = setTimeout(() => fetchDailyAdvice(), 1500);
+    return () => clearTimeout(t);
   }, [dataReady, leagueId, sport, fetchDailyAdvice]);
 
   useEffect(() => {
@@ -696,7 +699,8 @@ export default function CoachPage() {
     tradeAutoFetched.current = true;
     const cached = getWeeklyCache(leagueId, sport, league!.scoringPeriodId, "trade");
     if (cached) { setTradeAdvice(cached); return; }
-    fetchTradeAdvice();
+    const t = setTimeout(() => fetchTradeAdvice(), 3000);
+    return () => clearTimeout(t);
   }, [dataReady, leagueId, sport, league, fetchTradeAdvice]);
 
   // ── Render ────────────────────────────────────────────────────────────────
