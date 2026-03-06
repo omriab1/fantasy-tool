@@ -18,10 +18,12 @@ async function callOpenAICompat(
   model: string,
   systemPrompt: string,
   userPrompt: string,
-  maxTokens: number
+  maxTokens: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -55,10 +57,12 @@ async function callAnthropic(
   model: string,
   systemPrompt: string,
   userPrompt: string,
-  maxTokens: number
+  maxTokens: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
@@ -124,6 +128,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<CoachResponse
 
   const resolvedModel = model?.trim() || AI_DEFAULT_MODELS[provider as AIProvider] || "gpt-4o-mini";
   const maxTokens = adviceType === "daily" ? 800 : 1200;
+  const signal = req.signal;
 
   try {
     let raw: string;
@@ -132,38 +137,26 @@ export async function POST(req: NextRequest): Promise<NextResponse<CoachResponse
       case "openai":
         raw = await callOpenAICompat(
           "https://api.openai.com/v1",
-          apiKey,
-          resolvedModel,
-          systemPrompt,
-          userPrompt,
-          maxTokens
+          apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal
         );
         break;
 
       case "groq":
         raw = await callOpenAICompat(
           "https://api.groq.com/openai/v1",
-          apiKey,
-          resolvedModel,
-          systemPrompt,
-          userPrompt,
-          maxTokens
+          apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal
         );
         break;
 
       case "gemini":
         raw = await callOpenAICompat(
           "https://generativelanguage.googleapis.com/v1beta/openai",
-          apiKey,
-          resolvedModel,
-          systemPrompt,
-          userPrompt,
-          maxTokens
+          apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal
         );
         break;
 
       case "anthropic":
-        raw = await callAnthropic(apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens);
+        raw = await callAnthropic(apiKey, resolvedModel, systemPrompt, userPrompt, maxTokens, signal);
         break;
 
       default:

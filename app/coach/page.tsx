@@ -359,10 +359,12 @@ export default function CoachPage() {
   async function callAI(
     adviceType: "weekly" | "daily" | "trade",
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
+    signal?: AbortSignal
   ): Promise<string[]> {
     const res = await fetch("/api/ai/coach", {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         provider: aiProvider,
@@ -430,7 +432,7 @@ export default function CoachPage() {
 
   // ── Fetch weekly advice ───────────────────────────────────────────────────
 
-  const fetchWeeklyAdvice = useCallback(async (bypassCache = false) => {
+  const fetchWeeklyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (weeklyBusy.current || !league || !aiApiKey) return;
     weeklyBusy.current = true;
     setWeeklyLoading(true);
@@ -456,7 +458,7 @@ export default function CoachPage() {
         opponentStats,
       });
 
-      const insights = await callAI("weekly", systemPrompt, userPrompt);
+      const insights = await callAI("weekly", systemPrompt, userPrompt, signal);
       const advice: CoachAdvice = {
         type: "weekly",
         insights,
@@ -467,6 +469,7 @@ export default function CoachPage() {
       setCoachCache(`ai_coach_weekly_${leagueId}_${sport}_${currentPeriod}`, advice);
       setWeeklyAdvice(advice);
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       setWeeklyError((err as Error).message);
     } finally {
       setWeeklyLoading(false);
@@ -477,7 +480,7 @@ export default function CoachPage() {
 
   // ── Fetch daily advice ────────────────────────────────────────────────────
 
-  const fetchDailyAdvice = useCallback(async (bypassCache = false) => {
+  const fetchDailyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (dailyBusy.current || !league || !aiApiKey) return;
     dailyBusy.current = true;
     setDailyLoading(true);
@@ -532,7 +535,7 @@ export default function CoachPage() {
         freeAgents: rankedWithGames,
       });
 
-      const insights = await callAI("daily", systemPrompt, userPrompt);
+      const insights = await callAI("daily", systemPrompt, userPrompt, signal);
 
       // Extract top player IDs by scanning insight text for FA names
       const topPlayerIds: number[] = [];
@@ -561,6 +564,7 @@ export default function CoachPage() {
       setCoachCache(`ai_coach_daily_${leagueId}_${sport}_${today}`, advice);
       setDailyAdvice(advice);
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       setDailyError((err as Error).message);
     } finally {
       setDailyLoading(false);
@@ -571,7 +575,7 @@ export default function CoachPage() {
 
   // ── Fetch trade advice ────────────────────────────────────────────────────
 
-  const fetchTradeAdvice = useCallback(async (bypassCache = false) => {
+  const fetchTradeAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (tradeBusy.current || !league || !aiApiKey) return;
     tradeBusy.current = true;
     setTradeLoading(true);
@@ -655,7 +659,7 @@ export default function CoachPage() {
         allTeams: allTeamStats.filter((t) => t.name !== myTeamEntry.name),
       });
 
-      const insights = await callAI("trade", systemPrompt, userPrompt);
+      const insights = await callAI("trade", systemPrompt, userPrompt, signal);
       const advice: CoachAdvice = {
         type: "trade",
         insights,
@@ -665,6 +669,7 @@ export default function CoachPage() {
       setCoachCache(`ai_coach_trade_${leagueId}_${sport}_${period}`, advice);
       setTradeAdvice(advice);
     } catch (err) {
+      if ((err as Error).name === "AbortError") return;
       setTradeError((err as Error).message);
     } finally {
       setTradeLoading(false);
@@ -685,32 +690,33 @@ export default function CoachPage() {
 
     const period = league!.scoringPeriodId;
 
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
 
     async function runSequential() {
       // Weekly — cache check first to avoid loading flash
       const wCached = getWeeklyCache(leagueId, sport, period, "weekly");
       if (wCached) setWeeklyAdvice(wCached);
-      else await fetchWeeklyAdvice();
+      else await fetchWeeklyAdvice(false, signal);
 
-      // Stop if user navigated away before next request
-      if (cancelled) return;
+      // Stop here if user navigated away (abort cancels the in-flight request too)
+      if (signal.aborted) return;
 
       // Daily — only starts after weekly fully completes
       const dCached = getDailyCache(leagueId, sport);
       if (dCached) setDailyAdvice(dCached);
-      else await fetchDailyAdvice();
+      else await fetchDailyAdvice(false, signal);
 
-      if (cancelled) return;
+      if (signal.aborted) return;
 
       // Trade — only starts after daily fully completes
       const tCached = getWeeklyCache(leagueId, sport, period, "trade");
       if (tCached) setTradeAdvice(tCached);
-      else await fetchTradeAdvice();
+      else await fetchTradeAdvice(false, signal);
     }
 
     runSequential();
-    return () => { cancelled = true; };
+    return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataReady, leagueId, sport, league, fetchWeeklyAdvice, fetchDailyAdvice, fetchTradeAdvice]);
 
