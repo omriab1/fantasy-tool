@@ -361,6 +361,7 @@ export default function SettingsPage() {
     } else {
       localStorage.removeItem("ai_model");
     }
+    window.dispatchEvent(new Event("espn-settings-changed"));
     setAiSaved(true);
     setTimeout(() => setAiSaved(false), 2500);
   }

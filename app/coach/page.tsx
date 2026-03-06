@@ -14,7 +14,7 @@ import {
   buildTradePrompt,
   rankFreeAgents,
 } from "@/lib/coach-prompts";
-import { AI_PROVIDERS, AI_PROVIDER_LABELS, AI_DEFAULT_MODELS, AI_PROVIDER_KEY_URLS } from "@/lib/ai-providers";
+import { AI_PROVIDERS, AI_PROVIDER_LABELS, AI_DEFAULT_MODELS, AI_PROVIDER_FULL_URLS, AI_PROVIDER_DESCRIPTIONS } from "@/lib/ai-providers";
 import { SPORT_CONFIGS } from "@/lib/sports-config";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type {
@@ -55,60 +55,104 @@ function setCoachCache(key: string, advice: CoachAdvice): void {
 function InlineAISetup({ onSave }: { onSave: (provider: AIProvider, key: string) => void }) {
   const [provider, setProvider] = useState<AIProvider>("openai");
   const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
 
   function handleSave() {
     if (!apiKey.trim()) return;
     localStorage.setItem("ai_provider", provider);
     localStorage.setItem("ai_api_key", apiKey.trim());
+    window.dispatchEvent(new Event("espn-settings-changed"));
     onSave(provider, apiKey.trim());
   }
 
   return (
-    <div className="bg-[#1a1f2e] border border-amber-500/20 rounded-xl p-5 mb-4">
-      <p className="text-sm font-semibold text-amber-300 mb-1">AI Coach Setup</p>
-      <p className="text-xs text-gray-500 mb-4">
-        Add an AI API key to start getting advice. You can also configure this in{" "}
-        <Link href="/settings" className="text-[#e8193c] hover:underline">Settings</Link>.
-      </p>
+    <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden mb-2">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-white/8">
+        <p className="text-sm font-semibold text-white">Connect AI Provider</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          One-time setup — your key is saved in your browser.{" "}
+          <Link href="/settings" className="text-gray-400 hover:text-white underline">Full settings →</Link>
+        </p>
+      </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-2">
-          {AI_PROVIDERS.map((p) => (
-            <button
-              key={p}
-              onClick={() => setProvider(p)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                provider === p
-                  ? "bg-[#e8193c] border-[#e8193c] text-white"
-                  : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
-              }`}
-            >
-              {AI_PROVIDER_LABELS[p]}
-            </button>
-          ))}
+      <div className="px-5 py-4 flex flex-col gap-4">
+        {/* Step 1: Pick provider */}
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Step 1 — Choose a provider
+          </p>
+          <div className="flex flex-col gap-2">
+            {AI_PROVIDERS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setProvider(p)}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm border transition-colors text-left ${
+                  provider === p
+                    ? "bg-[#e8193c]/10 border-[#e8193c]/50 text-white"
+                    : "border-white/8 text-gray-400 hover:text-white hover:border-white/15"
+                }`}
+              >
+                <span className="font-medium">{AI_PROVIDER_LABELS[p]}</span>
+                <span className={`text-xs ${provider === p ? "text-gray-400" : "text-gray-600"}`}>
+                  {AI_PROVIDER_DESCRIPTIONS[p]}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <p className="text-xs text-gray-600">
-          Get your key from{" "}
-          <span className="text-gray-500">{AI_PROVIDER_KEY_URLS[provider]}</span>
-        </p>
-
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSave()}
-            placeholder={`${AI_PROVIDER_LABELS[provider]} API key…`}
-            className="flex-1 bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
-          />
-          <button
-            onClick={handleSave}
-            disabled={!apiKey.trim()}
-            className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shrink-0"
+        {/* Step 2: Get key */}
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Step 2 — Get your API key
+          </p>
+          <a
+            href={AI_PROVIDER_FULL_URLS[provider]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-white/10 text-sm text-gray-300 hover:text-white hover:border-white/25 transition-colors"
           >
-            Save
-          </button>
+            <span>🔑</span>
+            <span>Open {AI_PROVIDER_LABELS[provider]} API keys page</span>
+            <span className="ml-auto text-gray-600 text-xs">↗</span>
+          </a>
+          <p className="text-xs text-gray-600 mt-1.5 pl-1">
+            Sign in → create a new key → copy it → paste below
+          </p>
+        </div>
+
+        {/* Step 3: Paste and save */}
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Step 3 — Paste and save
+          </p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                placeholder="Paste your API key here…"
+                className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 pr-14 text-sm text-white font-mono placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+              >
+                {showKey ? "Hide" : "Show"}
+              </button>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={!apiKey.trim()}
+              className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shrink-0"
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -169,20 +213,20 @@ function HeadshotRow({ playerIds, cdnLeague }: { playerIds: number[]; cdnLeague:
 interface CoachCardProps {
   icon: string;
   title: string;
+  description: string;
+  updateCadence: string;
   opponentBadge?: string;
   advice: CoachAdvice | null;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
-  manualTrigger?: boolean;
-  manualDescription?: string;
   showHeadshotRow?: boolean;
   cdnLeague?: string;
 }
 
 function CoachCard({
-  icon, title, opponentBadge, advice, loading, error, onRefresh,
-  manualTrigger, manualDescription, showHeadshotRow, cdnLeague,
+  icon, title, description, updateCadence, opponentBadge, advice, loading, error, onRefresh,
+  showHeadshotRow, cdnLeague,
 }: CoachCardProps) {
   const lastUpdated = advice?.generatedAt
     ? new Date(advice.generatedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -191,25 +235,24 @@ function CoachCard({
   return (
     <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/8">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-base shrink-0">{icon}</span>
+      <div className="flex items-start justify-between px-5 py-3.5 border-b border-white/8">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="text-base shrink-0 mt-0.5">{icon}</span>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-white">{title}</h2>
-            {lastUpdated && (
-              <p className="text-xs text-gray-600">Updated {lastUpdated}</p>
-            )}
+            <p className="text-xs text-gray-500 mt-0.5 leading-snug">{description}</p>
+            <p className="text-xs text-gray-600 mt-1">
+              {lastUpdated ? `Updated ${lastUpdated}` : updateCadence}
+            </p>
           </div>
         </div>
-        {!manualTrigger && (
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="shrink-0 ml-3 text-xs text-gray-500 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-colors"
-          >
-            {loading ? "…" : "Refresh"}
-          </button>
-        )}
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="shrink-0 ml-3 text-xs text-gray-500 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-colors mt-0.5"
+        >
+          {loading ? "…" : "Refresh"}
+        </button>
       </div>
 
       {/* Opponent badge */}
@@ -225,21 +268,8 @@ function CoachCard({
       <div className="px-5 py-4">
         {loading && <Spinner />}
         {!loading && error && <ErrorBanner message={error} onRetry={onRefresh} />}
-        {!loading && !error && !advice && manualTrigger && (
-          <div className="py-4 text-center">
-            {manualDescription && (
-              <p className="text-sm text-gray-500 mb-4">{manualDescription}</p>
-            )}
-            <button
-              onClick={onRefresh}
-              className="bg-[#e8193c] hover:bg-[#c41234] text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors"
-            >
-              Analyze Now
-            </button>
-          </div>
-        )}
-        {!loading && !error && !advice && !manualTrigger && (
-          <p className="text-sm text-gray-600 text-center py-4">Click Refresh to get advice.</p>
+        {!loading && !error && !advice && (
+          <p className="text-sm text-gray-600 text-center py-4">Fetching advice…</p>
         )}
         {!loading && !error && advice && (
           <>
@@ -289,6 +319,7 @@ export default function CoachPage() {
   // Track whether auto-fetch has already been triggered this mount
   const weeklyAutoFetched = useRef(false);
   const dailyAutoFetched  = useRef(false);
+  const tradeAutoFetched  = useRef(false);
 
   // ── Read settings from localStorage ──────────────────────────────────────
 
@@ -642,38 +673,31 @@ export default function CoachPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league, players, scoringConfig, leagueId, sport, aiApiKey, aiProvider, aiModel, swid]);
 
-  // ── Auto-fetch on mount (weekly + daily) ──────────────────────────────────
+  // ── Auto-fetch on mount (weekly + daily + trade) ─────────────────────────
 
   useEffect(() => {
     if (!dataReady || weeklyAutoFetched.current) return;
     weeklyAutoFetched.current = true;
-
     const cached = getWeeklyCache(leagueId, sport, league!.scoringPeriodId, "weekly");
     if (cached) { setWeeklyAdvice(cached); return; }
-
-    const tradeCached = getWeeklyCache(leagueId, sport, league!.scoringPeriodId, "trade");
-    if (tradeCached) setTradeAdvice(tradeCached);
-
     fetchWeeklyAdvice();
   }, [dataReady, leagueId, sport, league, fetchWeeklyAdvice]);
 
   useEffect(() => {
     if (!dataReady || dailyAutoFetched.current) return;
     dailyAutoFetched.current = true;
-
     const cached = getDailyCache(leagueId, sport);
     if (cached) { setDailyAdvice(cached); return; }
-
     fetchDailyAdvice();
   }, [dataReady, leagueId, sport, fetchDailyAdvice]);
 
-  // Also restore trade cache on mount
   useEffect(() => {
-    if (!league || !leagueId) return;
-    const cached = getWeeklyCache(leagueId, sport, league.scoringPeriodId, "trade");
-    if (cached && !tradeAdvice) setTradeAdvice(cached);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league?.scoringPeriodId, leagueId, sport]);
+    if (!dataReady || tradeAutoFetched.current) return;
+    tradeAutoFetched.current = true;
+    const cached = getWeeklyCache(leagueId, sport, league!.scoringPeriodId, "trade");
+    if (cached) { setTradeAdvice(cached); return; }
+    fetchTradeAdvice();
+  }, [dataReady, leagueId, sport, league, fetchTradeAdvice]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -731,6 +755,8 @@ export default function CoachPage() {
           <CoachCard
             icon="📅"
             title="Weekly Matchup"
+            description="5 strategic insights for your current H2H matchup — categories to attack, categories to protect, and key roster moves."
+            updateCadence="Updates every matchup period"
             opponentBadge={weeklyAdvice?.opponentName ? `This week vs ${weeklyAdvice.opponentName}` : undefined}
             advice={isOffSeason ? null : weeklyAdvice}
             loading={weeklyLoading}
@@ -741,6 +767,8 @@ export default function CoachPage() {
           <CoachCard
             icon="📋"
             title="Daily Pickups"
+            description="5 waiver wire recommendations based on free agents who can help you win your current matchup, ranked by game count and category impact."
+            updateCadence="Updates once a day"
             opponentBadge={dailyAdvice?.opponentName ? `vs ${dailyAdvice.opponentName}` : undefined}
             advice={isOffSeason ? null : dailyAdvice}
             loading={dailyLoading}
@@ -753,12 +781,12 @@ export default function CoachPage() {
           <CoachCard
             icon="🔁"
             title="Trade Ideas"
+            description="3 trade packages tailored to your roster — sends surplus from your strengths to fix your weakest categories vs the rest of the league."
+            updateCadence="Updates every matchup period"
             advice={tradeAdvice}
             loading={tradeLoading}
             error={tradeError}
             onRefresh={() => fetchTradeAdvice(true)}
-            manualTrigger
-            manualDescription="Get 3 AI-generated trade package suggestions based on your roster vs the league. Updates weekly."
           />
         </>
       )}
