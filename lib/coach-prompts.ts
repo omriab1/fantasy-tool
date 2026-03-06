@@ -9,10 +9,7 @@ import type {
 // ─── System prompts ────────────────────────────────────────────────────────────
 
 export function buildSystemPrompt(adviceType: CoachAdviceType): string {
-  const lengthInstruction =
-    adviceType === "daily"
-      ? "Each insight must be 1–2 sentences max."
-      : "Each insight may be 1–4 sentences — use more detail only when the data warrants it.";
+  const lengthInstruction = "Each insight must be 1–2 sentences max. Be concise and direct.";
 
   return (
     `You are an expert fantasy sports coach. Be specific, data-driven, and actionable. ` +
@@ -52,22 +49,28 @@ export function buildWeeklyPrompt(params: {
   sportName: string;
   scoringConfig: LeagueScoringConfig;
   myTeamName: string;
+  myRoster: string[];
   myStats: AggregatedStats;
   opponentName: string;
+  opponentRoster: string[];
   opponentStats: AggregatedStats;
 }): string {
-  const { sportName, scoringConfig, myTeamName, myStats, opponentName, opponentStats } = params;
+  const { sportName, scoringConfig, myTeamName, myRoster, myStats, opponentName, opponentRoster, opponentStats } = params;
 
   const lines = [
     `Sport: ${sportName} | Format: ${scoringConfig.format}`,
     `Scoring categories: ${catList(scoringConfig)}`,
     ``,
-    `My team (${myTeamName}) stats per game: ${formatStats(myStats, scoringConfig)}`,
-    `Opponent (${opponentName}) stats per game: ${formatStats(opponentStats, scoringConfig)}`,
+    `My team (${myTeamName}):`,
+    `  Roster: ${myRoster.join(", ")}`,
+    `  Stats: ${formatStats(myStats, scoringConfig)}`,
+    ``,
+    `Opponent (${opponentName}):`,
+    `  Roster: ${opponentRoster.join(", ")}`,
+    `  Stats: ${formatStats(opponentStats, scoringConfig)}`,
     ``,
     `Provide exactly 5 numbered strategic insights for this week's H2H matchup. ` +
-    `Focus on: categories where I have a clear edge (protect them), categories where I'm ` +
-    `behind (how to close the gap or accept the loss), and any roster moves that could help.`,
+    `Name specific players from the rosters above. Focus on category edges, threats, and actionable moves.`,
   ];
 
   return lines.join("\n");
@@ -79,13 +82,16 @@ export function buildDailyPrompt(params: {
   sportName: string;
   scoringConfig: LeagueScoringConfig;
   myTeamName: string;
+  myRoster: Array<{ name: string; position: string }>;
   myStats: AggregatedStats;
   opponentName: string;
   opponentStats: AggregatedStats;
   freeAgents: Array<PlayerStats & { gamesThisWeek?: number }>;
 }): string {
-  const { sportName, scoringConfig, myTeamName, myStats, opponentName, opponentStats, freeAgents } =
+  const { sportName, scoringConfig, myTeamName, myRoster, myStats, opponentName, opponentStats, freeAgents } =
     params;
+
+  const rosterStr = myRoster.map((p) => `${p.name} (${p.position})`).join(", ");
 
   const faLines = freeAgents
     .slice(0, 20)
@@ -101,15 +107,16 @@ export function buildDailyPrompt(params: {
     `Sport: ${sportName} | Format: ${scoringConfig.format}`,
     `Scoring categories: ${catList(scoringConfig)}`,
     ``,
-    `My team (${myTeamName}) stats: ${formatStats(myStats, scoringConfig)}`,
+    `My team (${myTeamName}):`,
+    `  Current roster: ${rosterStr}`,
+    `  Stats: ${formatStats(myStats, scoringConfig)}`,
     `Opponent this week (${opponentName}) stats: ${formatStats(opponentStats, scoringConfig)}`,
     ``,
-    `Available free agents (top 20 by matchup relevance):`,
+    `Available free agents ONLY (recommend from this list only):`,
     faLines,
     ``,
-    `Provide exactly 5 numbered waiver pickup recommendations. For each: ` +
-    `name the player, explain why they help win this specific matchup, and which ` +
-    `roster player they should replace (if applicable). Be concise — 1–2 sentences each.`,
+    `Provide exactly 5 numbered waiver pickup recommendations from the free agents list above. ` +
+    `For each: name the free agent, state which current roster player to drop, and why it helps win this matchup.`,
   ];
 
   return lines.join("\n");
