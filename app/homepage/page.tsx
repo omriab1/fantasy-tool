@@ -20,6 +20,12 @@ const OPTIONS = [
     description: "Full round-robin simulation — see how every team stacks up against every other.",
   },
   {
+    href: "/coach",
+    emoji: "🤖",
+    title: "AI Coach",
+    description: "Weekly matchup insights, daily waiver pickups, and trade suggestions powered by AI.",
+  },
+  {
     href: "/settings",
     emoji: "⚙️",
     title: "Settings",

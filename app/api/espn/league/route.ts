@@ -30,8 +30,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing leagueId" }, { status: 400 });
   }
 
+  const includeSchedule = searchParams.get("schedule") === "1";
+
   const base = `${apiBase(cfg)}/games/${apiSegment(cfg)}/seasons`;
-  const views = "?view=mTeam&view=mSettings&view=mStatus&view=mRoster";
+  const views =
+    "?view=mTeam&view=mSettings&view=mStatus&view=mRoster" +
+    (includeSchedule ? "&view=proTeamSchedules" : "");
 
   // Try primary season year first; if 404, try statsFallbackYear (e.g. WNBA off-season)
   const yearsToTry: number[] = [cfg.seasonYear];

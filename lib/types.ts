@@ -177,3 +177,31 @@ export interface EspnPlayerInfo {
     [window in StatsWindow]?: PlayerStats;
   };
 }
+
+// ─── AI Coach types ────────────────────────────────────────────────────────────
+
+export type AIProvider = "openai" | "gemini" | "anthropic" | "groq";
+export type CoachAdviceType = "weekly" | "daily" | "trade";
+
+export interface CoachAdvice {
+  type: CoachAdviceType;
+  insights: string[];
+  generatedAt: string;
+  matchupPeriodId?: number;
+  opponentName?: string;
+  topPlayerIds?: number[];
+}
+
+export interface CoachRequest {
+  provider: AIProvider;
+  apiKey: string;
+  model?: string;
+  adviceType: CoachAdviceType;
+  systemPrompt: string;
+  userPrompt: string;
+}
+
+export interface CoachResponse {
+  insights: string[];
+  error?: string;
+}
