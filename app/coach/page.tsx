@@ -673,35 +673,38 @@ export default function CoachPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league, players, scoringConfig, leagueId, sport, aiApiKey, aiProvider, aiModel, swid]);
 
-  // ── Auto-fetch on mount (weekly + daily + trade) ─────────────────────────
-  // Staggered to avoid hitting free-tier rate limits (e.g. Gemini 15 RPM).
-  // Cached results are shown instantly; only uncached fetches are delayed.
+  // ── Auto-fetch on mount (weekly → daily → trade, strictly sequential) ──────
+  // Sequential ensures only one AI request is in-flight at a time,
+  // preventing 429 rate-limit errors on free-tier providers (e.g. Gemini 15 RPM).
 
   useEffect(() => {
     if (!dataReady || weeklyAutoFetched.current) return;
     weeklyAutoFetched.current = true;
-    const cached = getWeeklyCache(leagueId, sport, league!.scoringPeriodId, "weekly");
-    if (cached) { setWeeklyAdvice(cached); return; }
-    fetchWeeklyAdvice();
-  }, [dataReady, leagueId, sport, league, fetchWeeklyAdvice]);
-
-  useEffect(() => {
-    if (!dataReady || dailyAutoFetched.current) return;
     dailyAutoFetched.current = true;
-    const cached = getDailyCache(leagueId, sport);
-    if (cached) { setDailyAdvice(cached); return; }
-    const t = setTimeout(() => fetchDailyAdvice(), 1500);
-    return () => clearTimeout(t);
-  }, [dataReady, leagueId, sport, fetchDailyAdvice]);
-
-  useEffect(() => {
-    if (!dataReady || tradeAutoFetched.current) return;
     tradeAutoFetched.current = true;
-    const cached = getWeeklyCache(leagueId, sport, league!.scoringPeriodId, "trade");
-    if (cached) { setTradeAdvice(cached); return; }
-    const t = setTimeout(() => fetchTradeAdvice(), 3000);
-    return () => clearTimeout(t);
-  }, [dataReady, leagueId, sport, league, fetchTradeAdvice]);
+
+    const period = league!.scoringPeriodId;
+
+    async function runSequential() {
+      // Weekly — cache check first to avoid loading flash
+      const wCached = getWeeklyCache(leagueId, sport, period, "weekly");
+      if (wCached) setWeeklyAdvice(wCached);
+      else await fetchWeeklyAdvice();
+
+      // Daily — only starts after weekly fully completes
+      const dCached = getDailyCache(leagueId, sport);
+      if (dCached) setDailyAdvice(dCached);
+      else await fetchDailyAdvice();
+
+      // Trade — only starts after daily fully completes
+      const tCached = getWeeklyCache(leagueId, sport, period, "trade");
+      if (tCached) setTradeAdvice(tCached);
+      else await fetchTradeAdvice();
+    }
+
+    runSequential();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataReady, leagueId, sport, league, fetchWeeklyAdvice, fetchDailyAdvice, fetchTradeAdvice]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
