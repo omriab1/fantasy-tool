@@ -568,10 +568,7 @@ export default function PowerPage() {
               {/* Config label + mode info — first thing visible after scroll */}
               <div>
                 <p className="text-center text-xs text-gray-600 mb-2">
-                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)} ·{" "}
-                  {mode === "weeks"
-                    ? `${numWeeks} week${numWeeks !== 1 ? "s" : ""}`
-                    : windowLabel(statsWindow)}
+                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
                 </p>
 
                 {/* By-Weeks: quick week selects */}

@@ -359,7 +359,7 @@ export default function ComparePage() {
                   {sportConfig.name} · {scoringConfigLabel(scoringConfig)} ·{" "}
                   {mode === "weeks"
                     ? `${numWeeks} week${numWeeks !== 1 ? "s" : ""}`
-                    : `Current Roster · ${windowLabel(statsWindow)}`}
+                    : "Current Roster — IR excluded"}
                 </p>
 
                 {/* Quick selects for weeks mode */}
