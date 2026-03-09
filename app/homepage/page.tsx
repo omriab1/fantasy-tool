@@ -35,7 +35,7 @@ export default function HomePage() {
   const sportConfig = useSportConfig();
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-4 sm:justify-center sm:pt-3 px-4">
+    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-1 sm:justify-center sm:pt-0 px-4">
       {/* Logo + tagline */}
       <div className="text-center mb-5">
         <div className="text-4xl mb-3">{sportConfig.emoji}</div>
