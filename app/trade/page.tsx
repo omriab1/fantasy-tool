@@ -107,9 +107,9 @@ export default function TradePage() {
       )}
 
       {error && <div className="mb-6"><ErrorBanner message={error} onRetry={reload} /></div>}
-      {loading && <div className="text-center py-12 text-gray-500 text-sm">Loading player pool…</div>}
+      {loading && players.length === 0 && <div className="text-center py-12 text-gray-500 text-sm">Loading player pool…</div>}
 
-      {!loading && !noSettings && !error && players.length > 0 && !offseasonNoData && (
+      {!noSettings && !error && players.length > 0 && !offseasonNoData && (
         <>
           {windowNote && (
             <div className="mb-6 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-300">
