@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useSportConfig } from "@/hooks/useSportConfig";
 
 const OPTIONS = [
   {
@@ -19,7 +22,7 @@ const OPTIONS = [
     title: "Power Ranking",
     description: "Full round-robin simulation — see how every team stacks up against every other.",
   },
-  { href: "/coach", emoji: "🤖", title: "AI Coach", description: "Weekly matchup insights, daily waiver pickups, and trade suggestions powered by AI.", soon: true },
+  { href: "/coach", emoji: "🤖", title: "AI Coach", description: "Weekly matchup insights and daily waiver pickups powered by AI.", soon: true },
   {
     href: "/settings",
     emoji: "⚙️",
@@ -29,11 +32,13 @@ const OPTIONS = [
 ];
 
 export default function HomePage() {
+  const sportConfig = useSportConfig();
+
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-10 sm:justify-center sm:pt-0 px-4">
+    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-10 sm:justify-center sm:py-8 px-4">
       {/* Logo + tagline */}
       <div className="text-center mb-7">
-        <div className="text-4xl mb-3">🏀</div>
+        <div className="text-4xl mb-3">{sportConfig.emoji}</div>
         <h1 className="text-2xl font-bold text-white tracking-wide">Fantasy Tool</h1>
         <p className="text-gray-400 mt-1.5 text-xs max-w-xs mx-auto leading-relaxed">
           Your ESPN fantasy toolkit — analyze trades, compare teams, and rank your league.
