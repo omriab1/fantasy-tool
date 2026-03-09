@@ -19,12 +19,7 @@ const OPTIONS = [
     title: "Power Ranking",
     description: "Full round-robin simulation — see how every team stacks up against every other.",
   },
-  {
-    href: "/coach",
-    emoji: "🤖",
-    title: "AI Coach",
-    description: "Weekly matchup insights, daily waiver pickups, and trade suggestions powered by AI.",
-  },
+  { href: "/coach", emoji: "🤖", title: "AI Coach", description: "Weekly matchup insights, daily waiver pickups, and trade suggestions powered by AI.", soon: true },
   {
     href: "/settings",
     emoji: "⚙️",
@@ -47,26 +42,43 @@ export default function HomePage() {
 
       {/* Option cards */}
       <div className="w-full max-w-sm flex flex-col gap-2.5">
-        {OPTIONS.map((opt) => (
-          <Link
-            key={opt.href}
-            href={opt.href}
-            className="flex items-center gap-4 bg-[#1a1f2e] border border-white/10 rounded-xl px-4 py-3 hover:border-white/25 hover:bg-[#1f2540] transition-colors group"
-          >
-            <span className="text-2xl shrink-0">{opt.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-white font-semibold text-sm">{opt.title}</p>
-              <p className="text-gray-500 text-xs mt-0.5 leading-snug">{opt.description}</p>
-            </div>
-            <svg
-              className="shrink-0 text-gray-600 group-hover:text-gray-400 transition-colors"
-              width="16" height="16" viewBox="0 0 16 16" fill="currentColor"
+        {OPTIONS.map((opt) => {
+          if (opt.soon) {
+            return (
+              <div
+                key={opt.href}
+                className="relative flex items-center gap-4 bg-[#1a1f2e] border border-white/5 rounded-xl px-4 py-3 opacity-50 cursor-not-allowed select-none"
+              >
+                <span className="absolute -top-2 right-3 text-[9px] bg-[#1a1f2e] border border-amber-500/40 px-1.5 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
+                <span className="text-2xl shrink-0">{opt.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-semibold text-sm">{opt.title}</p>
+                  <p className="text-gray-500 text-xs mt-0.5 leading-snug">{opt.description}</p>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <Link
+              key={opt.href}
+              href={opt.href}
+              className="flex items-center gap-4 bg-[#1a1f2e] border border-white/10 rounded-xl px-4 py-3 hover:border-white/25 hover:bg-[#1f2540] transition-colors group"
             >
-              <path fillRule="evenodd" clipRule="evenodd"
-                d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" />
-            </svg>
-          </Link>
-        ))}
+              <span className="text-2xl shrink-0">{opt.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm">{opt.title}</p>
+                <p className="text-gray-500 text-xs mt-0.5 leading-snug">{opt.description}</p>
+              </div>
+              <svg
+                className="shrink-0 text-gray-600 group-hover:text-gray-400 transition-colors"
+                width="16" height="16" viewBox="0 0 16 16" fill="currentColor"
+              >
+                <path fillRule="evenodd" clipRule="evenodd"
+                  d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" />
+              </svg>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
