@@ -20,6 +20,12 @@ import Link from "next/link";
 
 type AnalysisMode = "weeks" | "roster";
 
+function windowLabel(w: StatsWindow): string {
+  if (w === "season") return "Season";
+  if (w === "proj") return "Proj";
+  return `L${w}d`;
+}
+
 // ── By-Weeks helpers (unchanged from committed code) ──────────────────────────
 
 const WEEKS_KEY = -1;
@@ -353,7 +359,7 @@ export default function ComparePage() {
                   {sportConfig.name} · {scoringConfigLabel(scoringConfig)} ·{" "}
                   {mode === "weeks"
                     ? `${numWeeks} week${numWeeks !== 1 ? "s" : ""}`
-                    : "Current Roster — IR excluded"}
+                    : `Current Roster · ${windowLabel(statsWindow)}`}
                 </p>
 
                 {/* Quick selects for weeks mode */}
@@ -410,23 +416,25 @@ export default function ComparePage() {
               </div>
 
               {compareError && <ErrorBanner message={compareError} onRetry={handleCompare} />}
-              {comparing && <div className="text-center py-8 text-gray-500 text-sm">Loading…</div>}
+              {comparing && !results && <div className="text-center py-8 text-gray-500 text-sm">Loading…</div>}
 
-              {results && !comparing && (
-                <>
-                  <VerdictBanner
-                    type="matchup"
-                    teamAName={teamAName}
-                    teamBName={teamBName}
-                    teamAWins={teamAWins}
-                    teamBWins={teamBWins}
-                    teamALogo={teamALogo}
-                    teamBLogo={teamBLogo}
-                  />
-                  <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
-                    <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
+              {results && (
+                <div className={comparing ? "opacity-40 pointer-events-none" : ""}>
+                  <div className="flex flex-col gap-4">
+                    <VerdictBanner
+                      type="matchup"
+                      teamAName={teamAName}
+                      teamBName={teamBName}
+                      teamAWins={teamAWins}
+                      teamBWins={teamBWins}
+                      teamALogo={teamALogo}
+                      teamBLogo={teamBLogo}
+                    />
+                    <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden max-w-lg mx-auto w-full">
+                      <CategoryTable mode="matchup" results={results} teamAName={teamAName} teamBName={teamBName} />
+                    </div>
                   </div>
-                </>
+                </div>
               )}
             </div>
           )}

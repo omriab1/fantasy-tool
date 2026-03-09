@@ -17,6 +17,12 @@ import { ShareModal } from "@/components/ShareModal";
 import type { StatsWindow, EspnSport } from "@/lib/types";
 import Link from "next/link";
 
+function windowLabel(w: StatsWindow): string {
+  if (w === "season") return "Season";
+  if (w === "proj") return "Proj";
+  return `L${w}d`;
+}
+
 export default function TradePage() {
   const [leagueId, setLeagueId] = useState("");
   const [espnS2, setEspnS2] = useState("");
@@ -165,7 +171,7 @@ export default function TradePage() {
               />
               {/* Detected scoring config subtitle */}
               <p className="text-center text-xs text-gray-600">
-                {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
+                {sportConfig.name} · {scoringConfigLabel(scoringConfig)} · {windowLabel(statsWindow)}
               </p>
               {scoringConfig.cats.some((c) => c.volumeStatIds) && (
                 <p className="text-center text-xs text-gray-700 -mt-2">
