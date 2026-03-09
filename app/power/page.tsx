@@ -16,6 +16,12 @@ import Link from "next/link";
 
 type AnalysisMode = "weeks" | "roster";
 
+function windowLabel(w: StatsWindow): string {
+  if (w === "season") return "Season";
+  if (w === "proj") return "Proj";
+  return `L${w}d`;
+}
+
 function splitName(name: string): string[] {
   const idx = name.indexOf(" ");
   return idx === -1 ? [name] : [name.slice(0, idx), name.slice(idx + 1)];
@@ -298,8 +304,6 @@ export default function PowerPage() {
   // Mode change: clear results
   useEffect(() => { setRankings(null); setTeamStatsMap(null); }, [mode]);
 
-  useEffect(() => { setRankings(null); setTeamStatsMap(null); }, [startPeriod, endPeriod]);
-
   // By-Weeks: auto-calculate on range change (only after first manual Calculate press)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (autoCalculate.current && mode === "weeks") handleWeeksCalculate(); }, [startPeriod, endPeriod]);
@@ -321,8 +325,7 @@ export default function PowerPage() {
     if (!leagueId || !espnS2 || !swid || !league) return;
     setCalculating(true);
     setError(null);
-    setRankings(null);
-    setTeamStatsMap(null);
+    if (shouldScrollRef.current) { setRankings(null); setTeamStatsMap(null); }
     setExpandedTeamId(null);
     setExpandedType(null);
     setHasCalculated(true);
@@ -565,7 +568,10 @@ export default function PowerPage() {
               {/* Config label + mode info — first thing visible after scroll */}
               <div>
                 <p className="text-center text-xs text-gray-600 mb-2">
-                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
+                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)} ·{" "}
+                  {mode === "weeks"
+                    ? `${numWeeks} week${numWeeks !== 1 ? "s" : ""}`
+                    : windowLabel(statsWindow)}
                 </p>
 
                 {/* By-Weeks: quick week selects */}
@@ -624,9 +630,10 @@ export default function PowerPage() {
               </div>
 
               {error && <ErrorBanner message={error} onRetry={handleCalculate} />}
-              {calculating && <div className="text-center py-8 text-gray-500 text-sm">Calculating…</div>}
+              {calculating && !rankings && <div className="text-center py-8 text-gray-500 text-sm">Calculating…</div>}
 
-              {rankings && !calculating && (
+              {rankings && (
+              <div className={calculating ? "opacity-40 pointer-events-none" : ""}>
               <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -774,6 +781,7 @@ export default function PowerPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
               </div>
               )}
             </div>
