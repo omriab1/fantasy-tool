@@ -171,7 +171,7 @@ export default function TradePage() {
               />
               {/* Detected scoring config subtitle */}
               <p className="text-center text-xs text-gray-600">
-                {sportConfig.name} · {scoringConfigLabel(scoringConfig)} · {windowLabel(statsWindow)}
+                {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
               </p>
               {scoringConfig.cats.some((c) => c.volumeStatIds) && (
                 <p className="text-center text-xs text-gray-700 -mt-2">
