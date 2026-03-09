@@ -35,14 +35,15 @@ export default function HomePage() {
   const sportConfig = useSportConfig();
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-8 sm:justify-center sm:pt-6 px-4">
+    <div className="min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-start pt-4 sm:justify-center sm:pt-3 px-4">
       {/* Logo + tagline */}
-      <div className="text-center mb-7">
+      <div className="text-center mb-5">
         <div className="text-4xl mb-3">{sportConfig.emoji}</div>
         <h1 className="text-2xl font-bold text-white tracking-wide">Fantasy Tool</h1>
         <p className="text-gray-400 mt-1.5 text-xs max-w-xs mx-auto leading-relaxed">
           Your ESPN fantasy toolkit — analyze trades, compare teams, and rank your league.
         </p>
+        <span className="inline-block mt-2 text-[10px] font-semibold text-gray-500 border border-white/10 rounded-full px-2 py-px">v7 · MLB</span>
       </div>
 
       {/* Option cards — 2-col mobile, 3-col desktop */}
