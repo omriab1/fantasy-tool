@@ -25,9 +25,11 @@ function parsePlayerEntry(
   gpStatId: number = STAT_IDS.GP,
   activeSlotIds?: number[],
 ): PlayerStats | null {
-  // Structure: { id, player: { fullName, defaultPositionId, proTeamId, stats: [...] } }
+  // Structure: { id, player: { fullName, defaultPositionId, proTeamId, stats: [...] }, playerPoolEntry: { injuryStatus } }
   const info = entry.player as Record<string, unknown> | undefined;
   if (!info) return null;
+  // injuryStatus can live at different levels depending on the ESPN response shape
+  const poolEntry = entry.playerPoolEntry as Record<string, unknown> | undefined;
 
   const statsArr = (info.stats ?? []) as unknown[];
   const targetSplit = SPLIT_TYPE[window];
@@ -52,13 +54,32 @@ function parsePlayerEntry(
   const raw = (statsEntry.stats ?? {}) as Record<string, number>;
   const get = (id: number) => raw[String(id)] ?? 0;
 
-  const gp = get(gpStatId) || get(STAT_IDS.GP);  // hockey GP=30, basketball GP=42
-  if (gp === 0) return null;
+  let gp = get(gpStatId);
+  // Baseball: stat 32 (GP) is often absent from ESPN's kona_player_info response when it's not
+  // a scored category. Estimate from available stats as a fallback:
+  //   1. GS (stat 33) — exact for SPs, very close to GP for regular batters
+  //   2. PA/4.2 (stat 22) — plate appearances ÷ MLB average PA/game for batters
+  // This handles MLB where stat 32 (GP) may not be present in ESPN's payload,
+  // and prevents the STAT_IDS.GP fallback (stat 42 = bball GP / MLB HBP) from mis-firing.
+  if (gp === 0 && gpStatId === 32) {
+    // Fallback chain (each may be absent from ESPN's projection/actual stats payload):
+    // 1. GS (33) — exact for SPs; close to GP for regular batters (starts most games)
+    // 2. PA/4.2 (22) — plate appearances ÷ MLB avg PA/game; present when OBP/AVG is scored
+    // 3. AB/3.3 (0)  — at-bats ÷ MLB avg AB/game; always projected for AVG-scoring leagues
+    // 4. OUTS/3 (34) — outs recorded ÷ 3 ≈ RP appearances; present when ERA/WHIP is scored
+    gp = get(33);
+    if (gp === 0 && get(22) > 0) gp = Math.round(get(22) / 4.2);
+    if (gp === 0 && get(0)  > 0) gp = Math.round(get(0)  / 3.3);
+    if (gp === 0 && get(34) > 0) gp = Math.max(1, Math.round(get(34) / 3));
+  }
+  // If gp is still 0, check whether the entry has ANY non-zero stat.
+  if (gp === 0 && !Object.values(raw).some(v => v !== 0)) return null;
 
   const posId = (info.defaultPositionId as number) ?? 9;
 
   const eligibleSlots =
     (info.eligibleSlots as number[] | undefined) ??
+    (poolEntry?.eligibleSlots as number[] | undefined) ??
     (entry.eligibleSlots as number[] | undefined) ??
     [];
 
@@ -94,7 +115,7 @@ function parsePlayerEntry(
         .map((s) => slotPosMap[s])
     )];
     const allPos = defaultPosName ? [defaultPosName, ...otherPos] : otherPos;
-    position = allPos.length > 0 ? allPos.join(", ") : "UT";
+    position = allPos.join(", "); // empty string when no position can be determined (avoids showing "UT")
   }
 
   return {
@@ -102,6 +123,9 @@ function parsePlayerEntry(
     playerName: (info.fullName as string) ?? "Unknown",
     teamAbbrev: String(info.proTeamId ?? "0"),
     position,
+    injuryStatus: (entry.injuryStatus as string | undefined)
+      ?? (poolEntry?.injuryStatus as string | undefined)
+      ?? (info.injuryStatus as string | undefined),
     // Store totals — aggregateStats will sum these and divide by total GP
     pts: get(STAT_IDS.PTS),
     reb: get(STAT_IDS.REB),
@@ -116,6 +140,9 @@ function parsePlayerEntry(
     fta: get(STAT_IDS.FTA),
     threepa: get(STAT_IDS["3PA"]),
     gp,
+    // ESPN pre-computed per-game FPts average — used directly in points-league display.
+    // Avoids the need to derive GP for normalization; ESPN already did the math.
+    appliedAverage: typeof statsEntry.appliedAverage === "number" ? statsEntry.appliedAverage : undefined,
     // Full ESPN stats dict — all stat IDs available for dynamic league support.
     // Keys are numeric stat IDs (accessed as rawStats[0], rawStats[13], etc.)
     rawStats: raw as unknown as Record<number, number>,
@@ -151,7 +178,7 @@ export function usePlayers(
   // When the window changes and data is already cached, switch instantly without a fetch.
   useEffect(() => {
     if (!leagueId || !espnS2 || !swid || !ready) return;
-    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v7", leagueId, `${sport}_${window}${cacheSuffix}`));
+    const cached = cacheGet<PlayerStats[]>(cacheKey("players_v19", leagueId, `${sport}_${window}${cacheSuffix}`));
     if (cached) setPlayers(cached);
   }, [leagueId, espnS2, swid, window, sport, ready, cacheSuffix]);
 
@@ -159,7 +186,7 @@ export function usePlayers(
     if (!leagueId || !espnS2 || !swid || !ready) return;
 
     // If the requested window is already cached, show it immediately (no spinner).
-    const key = cacheKey("players_v7", leagueId, `${sport}_${window}${cacheSuffix}`);
+    const key = cacheKey("players_v19", leagueId, `${sport}_${window}${cacheSuffix}`);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);
@@ -188,14 +215,18 @@ export function usePlayers(
       .then((data: unknown) => {
         const arr = Array.isArray(data) ? data : [];
         // Parse and cache ALL available windows from this single response so switching is instant.
-        const slots = slotKey ? activeSlotIds : undefined;
+        // Only use slot-based position detection for hockey — other sports use the defaultPosMap branch.
+        const slots = (needsSlots && slotKey) ? activeSlotIds : undefined;
         for (const w of cfg.availableWindows) {
+          // Projections use the current season year even when statsFallbackYear is set
+          // (e.g. MLB off-season: actual stats are 2025 but 2026 projections have seasonId:2026).
+          const wSeasonYear = (w === "proj" && cfg.statsFallbackYear) ? cfg.seasonYear : parseSeasonYear;
           const parsed: PlayerStats[] = [];
           for (const p of arr) {
             const stats = parsePlayerEntry(
               p as Record<string, unknown>,
               w,
-              parseSeasonYear,
+              wSeasonYear,
               cfg.slotPosMap,
               cfg.defaultPosMap,
               cfg.gpStatId ?? STAT_IDS.GP,
@@ -203,7 +234,7 @@ export function usePlayers(
             );
             if (stats) parsed.push(stats);
           }
-          cacheSet(cacheKey("players_v7", leagueId, `${sport}_${w}${cacheSuffix}`), parsed);
+          cacheSet(cacheKey("players_v19", leagueId, `${sport}_${w}${cacheSuffix}`), parsed);
           if (w === window) setPlayers(parsed);
         }
       })

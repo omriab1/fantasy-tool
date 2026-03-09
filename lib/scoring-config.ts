@@ -119,6 +119,122 @@ export const NHL_DEFAULT_SCORING_CONFIG: LeagueScoringConfig = {
   pointValues: {},
 };
 
+// ─── MLB Baseball Stat Map ────────────────────────────────────────────────────
+// Stat IDs discovered from live ESPN Fantasy Baseball API (league 128408842, season 2025).
+// Source: cwendt94/espn-api baseball constants + isReverseItem flags from live scoringItems.
+// Display order follows the actual scoringItems order from the user's H2H categories league.
+
+export const MLB_DISPLAY_ORDER: number[] = [
+  // Fielding / team wins / combo
+  68, 69, 70, 71, 73, 74, 76, 72, 82, 83,
+  // Pitching main
+  53, 47, 55, 46, 56, 57, 59, 60, 62, 63, 54, 64, 67, 58,
+  // Batting secondary
+  4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 17, 18, 19,
+  // Batting basics
+  0, 1, 2, 3,
+  // Pitching volume + rate
+  36, 37, 41, 39, 38, 48, 45, 49, 44, 43, 42,
+  // Batting advanced
+  20, 21, 22, 23, 25, 24, 29, 32, 33, 27, 34, 26, 35,
+];
+
+export const MLB_STAT_MAP: Record<number, ScoringCat> = {
+  // ── Batting counting stats ───────────────────────────────────────────────
+  0:  { id: "AB",   espnStatId: 0,  lowerIsBetter: false, compute: (t, gp) => safe(t[0]  ?? 0, Math.max(gp, 1)) },
+  1:  { id: "H",    espnStatId: 1,  lowerIsBetter: false, compute: (t, gp) => safe(t[1]  ?? 0, Math.max(gp, 1)) },
+  3:  { id: "2B",   espnStatId: 3,  lowerIsBetter: false, compute: (t, gp) => safe(t[3]  ?? 0, Math.max(gp, 1)) },
+  4:  { id: "3B",   espnStatId: 4,  lowerIsBetter: false, compute: (t, gp) => safe(t[4]  ?? 0, Math.max(gp, 1)) },
+  5:  { id: "HR",   espnStatId: 5,  lowerIsBetter: false, compute: (t, gp) => safe(t[5]  ?? 0, Math.max(gp, 1)) },
+  6:  { id: "XBH",  espnStatId: 6,  lowerIsBetter: false, compute: (t, gp) => safe(t[6]  ?? 0, Math.max(gp, 1)) },
+  7:  { id: "1B",   espnStatId: 7,  lowerIsBetter: false, compute: (t, gp) => safe(t[7]  ?? 0, Math.max(gp, 1)) },
+  8:  { id: "TB",   espnStatId: 8,  lowerIsBetter: false, compute: (t, gp) => safe(t[8]  ?? 0, Math.max(gp, 1)) },
+  10: { id: "BB",   espnStatId: 10, lowerIsBetter: false, compute: (t, gp) => safe(t[10] ?? 0, Math.max(gp, 1)) },
+  11: { id: "IBB",  espnStatId: 11, lowerIsBetter: false, compute: (t, gp) => safe(t[11] ?? 0, Math.max(gp, 1)) },
+  12: { id: "HBP",  espnStatId: 12, lowerIsBetter: false, compute: (t, gp) => safe(t[12] ?? 0, Math.max(gp, 1)) },
+  15: { id: "SAC",  espnStatId: 15, lowerIsBetter: false, compute: (t, gp) => safe(t[15] ?? 0, Math.max(gp, 1)) },
+  19: { id: "RC",   espnStatId: 19, lowerIsBetter: false, compute: (t, gp) => safe(t[19] ?? 0, Math.max(gp, 1)) },
+  20: { id: "R",    espnStatId: 20, lowerIsBetter: false, compute: (t, gp) => safe(t[20] ?? 0, Math.max(gp, 1)) },
+  21: { id: "RBI",  espnStatId: 21, lowerIsBetter: false, compute: (t, gp) => safe(t[21] ?? 0, Math.max(gp, 1)) },
+  22: { id: "PA",   espnStatId: 22, lowerIsBetter: false, compute: (t, gp) => safe(t[22] ?? 0, Math.max(gp, 1)) },
+  23: { id: "SB",   espnStatId: 23, lowerIsBetter: false, compute: (t, gp) => safe(t[23] ?? 0, Math.max(gp, 1)) },
+  24: { id: "CS",   espnStatId: 24, lowerIsBetter: true,  compute: (t, gp) => safe(t[24] ?? 0, Math.max(gp, 1)) },
+  25: { id: "NSB",  espnStatId: 25, lowerIsBetter: false, compute: (t, gp) => safe(t[25] ?? 0, Math.max(gp, 1)) },
+  26: { id: "GDP",  espnStatId: 26, lowerIsBetter: true,  compute: (t, gp) => safe(t[26] ?? 0, Math.max(gp, 1)) },
+  27: { id: "SO",   espnStatId: 27, lowerIsBetter: true,  compute: (t, gp) => safe(t[27] ?? 0, Math.max(gp, 1)) },
+  29: { id: "PPA",  espnStatId: 29, lowerIsBetter: false, compute: (t, gp) => safe(t[29] ?? 0, Math.max(gp, 1)) },
+  32: { id: "GP",   espnStatId: 32, lowerIsBetter: false, compute: (t)      => t[32] ?? 0 }, // raw total
+  33: { id: "GS",   espnStatId: 33, lowerIsBetter: false, compute: (t)      => t[33] ?? 0 }, // raw total
+  // ── Batting rate stats (volume-weighted from component totals) ───────────
+  2:  { id: "AVG",  espnStatId: 2,  lowerIsBetter: false, compute: (t) => safe(t[1] ?? 0, t[0] ?? 0) },                                           // H/AB
+  9:  { id: "SLG",  espnStatId: 9,  lowerIsBetter: false, compute: (t) => safe(t[8] ?? 0, t[0] ?? 0) },                                           // TB/AB
+  17: { id: "OBP",  espnStatId: 17, lowerIsBetter: false, compute: (t) => safe((t[1]??0)+(t[10]??0)+(t[12]??0), (t[0]??0)+(t[10]??0)+(t[12]??0)) }, // (H+BB+HBP)/(AB+BB+HBP)
+  18: { id: "OPS",  espnStatId: 18, lowerIsBetter: false, compute: (t) => safe(t[8]??0, t[0]??0) + safe((t[1]??0)+(t[10]??0)+(t[12]??0), (t[0]??0)+(t[10]??0)+(t[12]??0)) }, // SLG+OBP
+  // ── Pitching counting stats ──────────────────────────────────────────────
+  34: { id: "OUTS", espnStatId: 34, lowerIsBetter: false, compute: (t, gp) => safe(t[34] ?? 0, Math.max(gp, 1)) },
+  35: { id: "TBF",  espnStatId: 35, lowerIsBetter: false, compute: (t, gp) => safe(t[35] ?? 0, Math.max(gp, 1)) },
+  36: { id: "IP",   espnStatId: 36, lowerIsBetter: false, compute: (t)      => safe(t[34] ?? 0, 3) },  // OUTS/3
+  37: { id: "HA",   espnStatId: 37, lowerIsBetter: true,  compute: (t, gp) => safe(t[37] ?? 0, Math.max(gp, 1)) },
+  39: { id: "BB",   espnStatId: 39, lowerIsBetter: true,  compute: (t, gp) => safe(t[39] ?? 0, Math.max(gp, 1)) }, // pitcher BB
+  42: { id: "HBP",  espnStatId: 42, lowerIsBetter: true,  compute: (t, gp) => safe(t[42] ?? 0, Math.max(gp, 1)) }, // pitcher HBP
+  44: { id: "RA",   espnStatId: 44, lowerIsBetter: true,  compute: (t, gp) => safe(t[44] ?? 0, Math.max(gp, 1)) },
+  45: { id: "ER",   espnStatId: 45, lowerIsBetter: true,  compute: (t, gp) => safe(t[45] ?? 0, Math.max(gp, 1)) },
+  46: { id: "HRA",  espnStatId: 46, lowerIsBetter: true,  compute: (t, gp) => safe(t[46] ?? 0, Math.max(gp, 1)) },
+  48: { id: "K",    espnStatId: 48, lowerIsBetter: false, compute: (t, gp) => safe(t[48] ?? 0, Math.max(gp, 1)) }, // pitcher K
+  53: { id: "W",    espnStatId: 53, lowerIsBetter: false, compute: (t)      => t[53] ?? 0 }, // raw total
+  54: { id: "L",    espnStatId: 54, lowerIsBetter: true,  compute: (t)      => t[54] ?? 0 }, // raw total
+  56: { id: "SVO",  espnStatId: 56, lowerIsBetter: false, compute: (t)      => t[56] ?? 0 },
+  57: { id: "SV",   espnStatId: 57, lowerIsBetter: false, compute: (t)      => t[57] ?? 0 },
+  58: { id: "BS",   espnStatId: 58, lowerIsBetter: true,  compute: (t)      => t[58] ?? 0 },
+  60: { id: "HLD",  espnStatId: 60, lowerIsBetter: false, compute: (t)      => t[60] ?? 0 },
+  62: { id: "CG",   espnStatId: 62, lowerIsBetter: false, compute: (t)      => t[62] ?? 0 },
+  63: { id: "QS",   espnStatId: 63, lowerIsBetter: false, compute: (t)      => t[63] ?? 0 },
+  64: { id: "SHO",  espnStatId: 64, lowerIsBetter: false, compute: (t)      => t[64] ?? 0 },
+  67: { id: "SVHD", espnStatId: 67, lowerIsBetter: false, compute: (t)      => (t[57] ?? 0) + (t[60] ?? 0) }, // SV+HLD
+  // ── Pitching rate stats (computed from components) ───────────────────────
+  38: { id: "OBA",  espnStatId: 38, lowerIsBetter: true,  compute: (t) => (t[34] ?? 0) > 0 ? safe(t[37] ?? 0, (t[34] ?? 0) / 3 * 3 + (t[37] ?? 0)) : 0 },
+  41: { id: "WHIP", espnStatId: 41, lowerIsBetter: true,  compute: (t) => (t[34] ?? 0) > 0 ? ((t[37] ?? 0) + (t[39] ?? 0)) * 3 / (t[34] ?? 1) : 0 }, // (HA+BB)/IP
+  43: { id: "OOBP", espnStatId: 43, lowerIsBetter: true,  compute: (t) => (t[34] ?? 0) > 0 ? ((t[37] ?? 0) + (t[39] ?? 0) + (t[42] ?? 0)) * 3 / (t[34] ?? 1) : 0 },
+  47: { id: "ERA",  espnStatId: 47, lowerIsBetter: true,  compute: (t) => (t[34] ?? 0) > 0 ? (t[45] ?? 0) * 27 / (t[34] ?? 1) : 0 },                     // ER*9/IP
+  49: { id: "K/9",  espnStatId: 49, lowerIsBetter: false, compute: (t) => (t[34] ?? 0) > 0 ? (t[48] ?? 0) * 27 / (t[34] ?? 1) : 0 },                     // K*9/IP
+  55: { id: "WPCT", espnStatId: 55, lowerIsBetter: false, compute: (t) => safe(t[53] ?? 0, (t[53] ?? 0) + (t[54] ?? 0)) },                                // W/(W+L)
+  59: { id: "SV%",  espnStatId: 59, lowerIsBetter: false, compute: (t) => safe(t[57] ?? 0, t[56] ?? 0) },                                                  // SV/SVO
+  82: { id: "K/BB", espnStatId: 82, lowerIsBetter: false, compute: (t) => safe(t[48] ?? 0, t[39] ?? 0) },                                                  // K/BB (pitcher)
+  // ── Fielding stats ────────────────────────────────────────────────────────
+  68: { id: "PO",   espnStatId: 68, lowerIsBetter: false, compute: (t, gp) => safe(t[68] ?? 0, Math.max(gp, 1)) },
+  69: { id: "A",    espnStatId: 69, lowerIsBetter: false, compute: (t, gp) => safe(t[69] ?? 0, Math.max(gp, 1)) },
+  70: { id: "OFA",  espnStatId: 70, lowerIsBetter: false, compute: (t, gp) => safe(t[70] ?? 0, Math.max(gp, 1)) },
+  71: { id: "FPCT", espnStatId: 71, lowerIsBetter: false, compute: (t) => safe((t[68]??0)+(t[69]??0), (t[68]??0)+(t[69]??0)+(t[72]??0)) }, // (PO+A)/(PO+A+E)
+  72: { id: "E",    espnStatId: 72, lowerIsBetter: true,  compute: (t, gp) => safe(t[72] ?? 0, Math.max(gp, 1)) },
+  73: { id: "DP",   espnStatId: 73, lowerIsBetter: false, compute: (t, gp) => safe(t[73] ?? 0, Math.max(gp, 1)) },
+  74: { id: "TW",   espnStatId: 74, lowerIsBetter: false, compute: (t)      => t[74] ?? 0 }, // Team Wins (batting)
+  76: { id: "PTW",  espnStatId: 76, lowerIsBetter: false, compute: (t)      => t[76] ?? 0 }, // Team Wins (pitching)
+  83: { id: "SVHD", espnStatId: 83, lowerIsBetter: false, compute: (t)      => t[83] ?? 0 }, // Saves+Holds (alternate ID)
+};
+
+/**
+ * Default fallback scoring config for MLB leagues.
+ * Standard 5x5 H2H: R, HR, RBI, SB, AVG + W, SV, K, ERA, WHIP
+ */
+export const MLB_DEFAULT_SCORING_CONFIG: LeagueScoringConfig = {
+  format: "categories",
+  cats: [
+    MLB_STAT_MAP[20],  // R
+    MLB_STAT_MAP[5],   // HR
+    MLB_STAT_MAP[21],  // RBI
+    MLB_STAT_MAP[23],  // SB
+    MLB_STAT_MAP[2],   // AVG
+    MLB_STAT_MAP[17],  // OBP
+    MLB_STAT_MAP[53],  // W
+    MLB_STAT_MAP[57],  // SV
+    MLB_STAT_MAP[48],  // K
+    MLB_STAT_MAP[47],  // ERA
+    MLB_STAT_MAP[41],  // WHIP
+    MLB_STAT_MAP[63],  // QS
+  ],
+  pointValues: {},
+};
+
 /**
  * ESPN UI display order for stat IDs — controls the row order shown in the app.
  *
