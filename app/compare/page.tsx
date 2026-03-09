@@ -356,62 +356,61 @@ export default function ComparePage() {
             <div ref={resultsRef} className="scroll-mt-14 flex flex-col gap-4">
               <div>
                 <p className="text-center text-xs text-gray-600 mb-2">
-                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)} ·{" "}
-                  {mode === "weeks"
-                    ? `${numWeeks} week${numWeeks !== 1 ? "s" : ""}`
-                    : "Current Roster — IR excluded"}
+                  {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
                 </p>
 
                 {/* Quick selects for weeks mode */}
                 {mode === "weeks" && (
-                  <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
-                    <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
-                    {[1, 2, 3, 4, 6, 8].map((n) => {
-                      const lastEnd = Math.max(1, league.scoringPeriodId - 1);
-                      const presetStart = Math.max(1, lastEnd - n + 1);
-                      const active = startPeriod === presetStart && endPeriod === lastEnd;
-                      return (
-                        <button
-                          key={n}
-                          onClick={() => { setStartPeriod(presetStart); setEndPeriod(lastEnd); }}
-                          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                            active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
-                          }`}
-                        >
-                          Last {n}w
-                        </button>
-                      );
-                    })}
-                    <button
-                      onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
-                      className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                        startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
-                          ? "bg-[#e8193c] border-[#e8193c] text-white"
-                          : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
-                      }`}
-                    >
-                      Season
-                    </button>
-                  </div>
+                  <>
+                    <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                      <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
+                      {[1, 2, 3, 4, 6, 8].map((n) => {
+                        const lastEnd = Math.max(1, league.scoringPeriodId - 1);
+                        const presetStart = Math.max(1, lastEnd - n + 1);
+                        const active = startPeriod === presetStart && endPeriod === lastEnd;
+                        return (
+                          <button
+                            key={n}
+                            onClick={() => { setStartPeriod(presetStart); setEndPeriod(lastEnd); }}
+                            className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                              active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                            }`}
+                          >
+                            Last {n}w
+                          </button>
+                        );
+                      })}
+                      <button
+                        onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                          startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
+                            ? "bg-[#e8193c] border-[#e8193c] text-white"
+                            : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                        }`}
+                      >
+                        Season
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-600 text-center">
+                      {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                    </p>
+                  </>
                 )}
 
                 {/* Window selector for roster mode */}
                 {mode === "roster" && (
-                  <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
-                    <span className="text-xs text-gray-500 shrink-0">Stats window:</span>
-                    <StatsWindowTabs
-                      value={statsWindow}
-                      onChange={setStatsWindow}
-                      availableWindows={sportConfig.availableWindows}
-                      note={getStatsWindowNote(sportConfig, statsWindow)}
-                    />
-                  </div>
-                )}
-
-                {mode === "weeks" && (
-                  <p className="text-xs text-gray-600 text-center">
-                    {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
-                  </p>
+                  <>
+                    <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                      <span className="text-xs text-gray-500 shrink-0">Stats window:</span>
+                      <StatsWindowTabs
+                        value={statsWindow}
+                        onChange={setStatsWindow}
+                        availableWindows={sportConfig.availableWindows}
+                        note={getStatsWindowNote(sportConfig, statsWindow)}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 text-center">Averages of each team&apos;s active roster — players in IR spots are excluded</p>
+                  </>
                 )}
               </div>
 
