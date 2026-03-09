@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { usePlayers } from "@/hooks/usePlayers";
-import { useLeague } from "@/hooks/useLeague";
+import { useFantasyLeague } from "@/hooks/useFantasyLeague";
+import { useFantasyPlayers } from "@/hooks/useFantasyPlayers";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { calcTradeScore } from "@/lib/trade-score";
 import { scoringConfigLabel } from "@/lib/scoring-config";
@@ -14,7 +14,7 @@ import { CategoryTable } from "@/components/CategoryTable";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ShareModal } from "@/components/ShareModal";
-import type { StatsWindow, EspnSport } from "@/lib/types";
+import type { StatsWindow, EspnSport, FantasyProvider } from "@/lib/types";
 import Link from "next/link";
 
 function windowLabel(w: StatsWindow): string {
@@ -29,6 +29,10 @@ export default function TradePage() {
   const [swid, setSwid] = useState("");
   const [sport, setSport] = useState<EspnSport>("fba");
   const [statsWindow, setStatsWindow] = useState<StatsWindow>("season");
+  const [provider, setProvider] = useState<FantasyProvider>("espn");
+  const [yahooLeagueKey, setYahooLeagueKey] = useState("");
+  const [yahooB, setYahooB] = useState("");
+  const [yahooT, setYahooT] = useState("");
 
   const [givingIds, setGivingIds] = useState<number[]>([]);
   const [receivingIds, setReceivingIds] = useState<number[]>([]);
@@ -36,25 +40,37 @@ export default function TradePage() {
 
   useEffect(() => {
     function readSettings() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setProvider(p);
       const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
       const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
       setSport(validSport);
-      // Only fall back to the legacy key for NBA (fba) — other sports must have their own saved ID
       const leagueIdFallback = validSport === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "";
       setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
+      setYahooB(localStorage.getItem("yahoo_b") ?? "");
+      setYahooT(localStorage.getItem("yahoo_t") ?? "");
     }
     readSettings();
-    window.addEventListener("espn-settings-changed", readSettings);
-    return () => window.removeEventListener("espn-settings-changed", readSettings);
+    window.addEventListener("fantasy-settings-changed", readSettings);
+    return () => window.removeEventListener("fantasy-settings-changed", readSettings);
   }, []);
 
   const sportConfig = SPORT_CONFIGS[sport];
 
-  // scoringConfig is auto-detected from league settings
-  const { league, scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
-  const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow, sport, league?.activeLineupSlotIds);
+  // Provider-aware league + players hooks
+  const { league, scoringConfig } = useFantasyLeague({
+    provider,
+    espn: { leagueId, espnS2, swid, sport },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT },
+  });
+  const { players, loading, error, reload } = useFantasyPlayers({
+    provider,
+    espn: { leagueId, espnS2, swid, window: statsWindow, sport, activeSlotIds: league?.activeLineupSlotIds },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT, window: statsWindow },
+  });
 
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),

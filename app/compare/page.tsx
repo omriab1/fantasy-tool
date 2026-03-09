@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useLeague } from "@/hooks/useLeague";
-import { usePlayers } from "@/hooks/usePlayers";
+import { useFantasyLeague } from "@/hooks/useFantasyLeague";
+import { useFantasyPlayers } from "@/hooks/useFantasyPlayers";
 import { calcTradeScore } from "@/lib/trade-score";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { scoringConfigLabel } from "@/lib/scoring-config";
 import { swidMatchesOwner } from "@/lib/swid-parser";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
 import { SPORT_CONFIGS, getStatsWindowNote } from "@/lib/sports-config";
-import type { AggregatedStats, CategoryResult, LeagueScoringConfig, EspnSport, StatsWindow } from "@/lib/types";
+import type { AggregatedStats, CategoryResult, LeagueScoringConfig, EspnSport, StatsWindow, FantasyProvider } from "@/lib/types";
 import { TeamSelector } from "@/components/TeamSelector";
 import { WeekRangePicker } from "@/components/WeekRangePicker";
 import { StatsWindowTabs } from "@/components/StatsWindowTabs";
@@ -46,6 +46,10 @@ export default function ComparePage() {
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
   const [sport, setSport] = useState<EspnSport>("fba");
+  const [provider, setProvider] = useState<FantasyProvider>("espn");
+  const [yahooLeagueKey, setYahooLeagueKey] = useState("");
+  const [yahooB, setYahooB] = useState("");
+  const [yahooT, setYahooT] = useState("");
 
   // Mode
   const [mode, setMode] = useState<AnalysisMode>("weeks");
@@ -74,6 +78,8 @@ export default function ComparePage() {
 
   useEffect(() => {
     function readSettings() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setProvider(p);
       const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
       const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
       setSport(validSport);
@@ -81,16 +87,27 @@ export default function ComparePage() {
       setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
+      setYahooB(localStorage.getItem("yahoo_b") ?? "");
+      setYahooT(localStorage.getItem("yahoo_t") ?? "");
     }
     readSettings();
-    window.addEventListener("espn-settings-changed", readSettings);
-    return () => window.removeEventListener("espn-settings-changed", readSettings);
+    window.addEventListener("fantasy-settings-changed", readSettings);
+    return () => window.removeEventListener("fantasy-settings-changed", readSettings);
   }, []);
 
   const sportConfig = SPORT_CONFIGS[sport];
 
-  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid, sport);
-  const { players, loading: playersLoading, error: playersError } = usePlayers(leagueId, espnS2, swid, statsWindow, sport, league?.activeLineupSlotIds);
+  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useFantasyLeague({
+    provider,
+    espn: { leagueId, espnS2, swid, sport },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT },
+  });
+  const { players, loading: playersLoading, error: playersError } = useFantasyPlayers({
+    provider,
+    espn: { leagueId, espnS2, swid, window: statsWindow, sport, activeSlotIds: league?.activeLineupSlotIds },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT, window: statsWindow },
+  });
 
   useEffect(() => {
     if (!league || !swid) return;

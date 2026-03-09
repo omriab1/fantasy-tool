@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { useLeague } from "@/hooks/useLeague";
+import { useFantasyLeague } from "@/hooks/useFantasyLeague";
 import { usePlayers } from "@/hooks/usePlayers";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { swidMatchesOwner } from "@/lib/swid-parser";
@@ -20,6 +20,7 @@ import type {
   CoachAdvice,
   CoachResponse,
   EspnSport,
+  FantasyProvider,
   LeagueInfo,
   LeagueScoringConfig,
   PlayerStats,
@@ -242,6 +243,10 @@ export default function CoachPage() {
   const [espnS2, setEspnS2]     = useState("");
   const [swid, setSwid]         = useState("");
   const [sport, setSport]       = useState<EspnSport>("fba");
+  const [provider, setProvider] = useState<FantasyProvider>("espn");
+  const [yahooLeagueKey, setYahooLeagueKey] = useState("");
+  const [yahooB, setYahooB]     = useState("");
+  const [yahooT, setYahooT]     = useState("");
 
   // Weekly advice
   const [weeklyAdvice, setWeeklyAdvice]   = useState<CoachAdvice | null>(null);
@@ -263,6 +268,8 @@ export default function CoachPage() {
 
   useEffect(() => {
     function readSettings() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setProvider(p);
       const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
       const validSport = storedSport in SPORT_CONFIGS ? storedSport : "fba";
       setSport(validSport);
@@ -272,15 +279,22 @@ export default function CoachPage() {
       );
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
+      setYahooB(localStorage.getItem("yahoo_b") ?? "");
+      setYahooT(localStorage.getItem("yahoo_t") ?? "");
     }
     readSettings();
-    window.addEventListener("espn-settings-changed", readSettings);
-    return () => window.removeEventListener("espn-settings-changed", readSettings);
+    window.addEventListener("fantasy-settings-changed", readSettings);
+    return () => window.removeEventListener("fantasy-settings-changed", readSettings);
   }, []);
 
-  // ── ESPN data ─────────────────────────────────────────────────────────────
+  // ── League + player data (provider-aware) ─────────────────────────────────
 
-  const { league, scoringConfig, loading: leagueLoading } = useLeague(leagueId, espnS2, swid, sport);
+  const { league, scoringConfig, loading: leagueLoading } = useFantasyLeague({
+    provider,
+    espn: { leagueId, espnS2, swid, sport },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT },
+  });
   const { players, loading: playersLoading } = usePlayers(
     leagueId, espnS2, swid, "30", sport, league?.activeLineupSlotIds
   );
@@ -371,6 +385,10 @@ export default function CoachPage() {
 
   const fetchWeeklyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (weeklyBusy.current || !league) return;
+    if (provider === "yahoo") {
+      setWeeklyError("AI Coach weekly analysis uses ESPN matchup data — switch to ESPN in the navbar.");
+      return;
+    }
     weeklyBusy.current = true;
     setWeeklyLoading(true);
     setWeeklyError(null);
@@ -458,12 +476,16 @@ export default function CoachPage() {
       weeklyBusy.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, playersSeason, players15d, playersProj, scoringConfig, leagueId, sport, espnS2, swid]);
+  }, [league, players, playersSeason, players15d, playersProj, scoringConfig, leagueId, sport, espnS2, swid, provider]);
 
   // ── Fetch daily advice ────────────────────────────────────────────────────
 
   const fetchDailyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (dailyBusy.current || !league) return;
+    if (provider === "yahoo") {
+      setDailyError("AI Coach daily analysis uses ESPN schedule data — switch to ESPN in the navbar.");
+      return;
+    }
     dailyBusy.current = true;
     setDailyLoading(true);
     setDailyError(null);
@@ -626,7 +648,7 @@ export default function CoachPage() {
       (dailyBusy as { current: boolean }).current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid]); // window arrays accessed via ref — omitted intentionally
+  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid, provider]); // window arrays accessed via ref — omitted intentionally
 
   // ── Stable refs so the sequential effect never re-fires due to callback identity changes ──
   // fetchWeeklyAdvice / fetchDailyAdvice recreate when player arrays load (players7d etc.),
