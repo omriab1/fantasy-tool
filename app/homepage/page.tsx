@@ -45,21 +45,19 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Option cards */}
-      <div className="w-full max-w-sm flex flex-col gap-2.5">
+      {/* Option cards — 2-col mobile, 3-col desktop */}
+      <div className="w-full max-w-2xl grid grid-cols-2 sm:grid-cols-3 gap-3">
         {OPTIONS.map((opt) => {
           if (opt.soon) {
             return (
               <div
                 key={opt.href}
-                className="relative flex items-center gap-4 bg-[#1a1f2e] border border-white/5 rounded-xl px-4 py-3 opacity-50 cursor-not-allowed select-none"
+                className="relative flex flex-col items-center text-center bg-[#1a1f2e] border border-white/5 rounded-xl px-3 py-4 opacity-50 cursor-not-allowed select-none"
               >
                 <span className="absolute -top-2 right-3 text-[9px] bg-[#1a1f2e] border border-amber-500/40 px-1.5 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
-                <span className="text-2xl shrink-0">{opt.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold text-sm">{opt.title}</p>
-                  <p className="text-gray-500 text-xs mt-0.5 leading-snug">{opt.description}</p>
-                </div>
+                <span className="text-3xl mb-2">{opt.emoji}</span>
+                <p className="text-white font-semibold text-sm">{opt.title}</p>
+                <p className="text-gray-500 text-xs mt-1 leading-snug">{opt.description}</p>
               </div>
             );
           }
@@ -67,20 +65,11 @@ export default function HomePage() {
             <Link
               key={opt.href}
               href={opt.href}
-              className="flex items-center gap-4 bg-[#1a1f2e] border border-white/10 rounded-xl px-4 py-3 hover:border-white/25 hover:bg-[#1f2540] transition-colors group"
+              className="flex flex-col items-center text-center bg-[#1a1f2e] border border-white/10 rounded-xl px-3 py-4 hover:border-white/25 hover:bg-[#1f2540] transition-colors"
             >
-              <span className="text-2xl shrink-0">{opt.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold text-sm">{opt.title}</p>
-                <p className="text-gray-500 text-xs mt-0.5 leading-snug">{opt.description}</p>
-              </div>
-              <svg
-                className="shrink-0 text-gray-600 group-hover:text-gray-400 transition-colors"
-                width="16" height="16" viewBox="0 0 16 16" fill="currentColor"
-              >
-                <path fillRule="evenodd" clipRule="evenodd"
-                  d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06L7.28 12.78a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" />
-              </svg>
+              <span className="text-3xl mb-2">{opt.emoji}</span>
+              <p className="text-white font-semibold text-sm">{opt.title}</p>
+              <p className="text-gray-500 text-xs mt-1 leading-snug">{opt.description}</p>
             </Link>
           );
         })}
