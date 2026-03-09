@@ -270,8 +270,8 @@ export default function ComparePage() {
               />
             </div>
 
-            {/* Mode toggle + Compare button */}
-            <div className="border-t border-white/5 pt-5 mb-5 flex items-center justify-between gap-2 flex-wrap">
+            {/* Mode toggle */}
+            <div className="border-t border-white/5 pt-5 mb-5">
               <div className="flex gap-2">
                 <button
                   onClick={() => setMode("weeks")}
@@ -294,13 +294,6 @@ export default function ComparePage() {
                   By Roster
                 </button>
               </div>
-              <button
-                onClick={() => { shouldScrollRef.current = true; autoCompare.current = true; handleCompare(); }}
-                disabled={!canCompare}
-                className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-1.5 rounded-lg text-sm transition-colors"
-              >
-                {mode === "weeks" && comparing ? "Loading…" : "Compare"}
-              </button>
             </div>
 
             {/* By-Weeks controls */}
@@ -342,6 +335,15 @@ export default function ComparePage() {
               </div>
             )}
 
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => { shouldScrollRef.current = true; autoCompare.current = true; handleCompare(); }}
+                disabled={!canCompare}
+                className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-1.5 rounded-lg text-sm transition-colors"
+              >
+                {mode === "weeks" && comparing ? "Loading…" : "Compare"}
+              </button>
+            </div>
           </div>
 
           {hasCompared && (
