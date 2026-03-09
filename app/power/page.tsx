@@ -495,7 +495,7 @@ export default function PowerPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setMode("weeks")}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     mode === "weeks"
                       ? "bg-[#e8193c] text-white"
                       : "text-gray-400 hover:text-white border border-white/10 hover:border-white/20"
@@ -505,13 +505,13 @@ export default function PowerPage() {
                 </button>
                 <button
                   onClick={() => setMode("roster")}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     mode === "roster"
                       ? "bg-[#e8193c] text-white"
                       : "text-gray-400 hover:text-white border border-white/10 hover:border-white/20"
                   }`}
                 >
-                  By Current Roster
+                  By Roster
                 </button>
               </div>
             </div>
@@ -549,11 +549,11 @@ export default function PowerPage() {
               </div>
             )}
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-5 flex justify-end">
               <button
                 onClick={() => { shouldScrollRef.current = true; autoCalculate.current = true; handleCalculate(); }}
                 disabled={calculating || (mode === "roster" && !rosterReady)}
-                className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-8 py-2.5 rounded-lg transition-colors"
+                className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-1.5 rounded-lg text-sm transition-colors"
               >
                 {calculating ? "Calculating…" : "Calculate"}
               </button>
