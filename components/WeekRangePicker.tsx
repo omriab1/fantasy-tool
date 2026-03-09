@@ -25,13 +25,12 @@ export function WeekRangePicker({ currentPeriod, startPeriod, endPeriod, onStart
     <div className="flex flex-col gap-3">
       {/* Quick presets */}
       <div>
-        <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">Quick select</p>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           {PRESETS.map((n) => (
             <button
               key={n}
               onClick={() => applyPreset(n)}
-              className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+              className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
                 endPeriod - startPeriod + 1 === n && endPeriod === Math.max(1, currentPeriod - 1)
                   ? "bg-[#e8193c] border-[#e8193c] text-white"
                   : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
@@ -42,7 +41,7 @@ export function WeekRangePicker({ currentPeriod, startPeriod, endPeriod, onStart
           ))}
           <button
             onClick={() => { onStartChange(1); onEndChange(Math.max(1, currentPeriod - 1)); }}
-            className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+            className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
               startPeriod === 1 && endPeriod === Math.max(1, currentPeriod - 1)
                 ? "bg-[#e8193c] border-[#e8193c] text-white"
                 : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
@@ -51,7 +50,7 @@ export function WeekRangePicker({ currentPeriod, startPeriod, endPeriod, onStart
             Season
           </button>
         </div>
-        <p className="text-xs text-gray-600 mt-2">
+        <p className="hidden sm:block text-xs text-gray-600 mt-2">
           Quick select uses completed weeks only. To include the current week, set the end week manually below.
         </p>
       </div>
