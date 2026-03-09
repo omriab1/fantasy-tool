@@ -43,7 +43,6 @@ export default function HomePage() {
         <p className="text-gray-400 mt-1.5 text-xs max-w-xs mx-auto leading-relaxed">
           Your ESPN fantasy toolkit — analyze trades, compare teams, and rank your league.
         </p>
-        <span className="inline-block mt-2 text-[10px] font-semibold text-gray-500 border border-white/10 rounded-full px-2 py-px">v7 · MLB</span>
       </div>
 
       {/* Option cards — 2-col mobile, 3-col desktop */}
