@@ -21,15 +21,19 @@ export async function GET(req: NextRequest) {
   const y = cfg.seasonYear;
   const statsY = cfg.statsFallbackYear ?? y;
   const WINDOW_FILTERS: Record<string, object> = {
+    // Include "10{y}" (current-year projections) even when statsFallbackYear is set so that
+    // projections are returned alongside actual stats in a single fetch and cached correctly.
     season: {
-      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`00${statsY}`, `10${statsY}`, `00${statsY - 1}`] },
+      filterStatsForTopScoringPeriodIds: { value: 3, additionalValue: [`00${statsY}`, `10${y}`, `00${statsY - 1}`] },
     },
     "30": { filterStatsForTopScoringPeriodIds: { value: 30 } },
     "15": { filterStatsForTopScoringPeriodIds: { value: 15 } },
     "7": { filterStatsForTopScoringPeriodIds: { value: 7 } },
-    // Projections: statSourceId=1 entries — "10{year}" is the ESPN projection season code
+    // Projections: statSourceId=1 entries — "10{year}" is the ESPN projection season code.
+    // Use the current season year (y) for projections even when statsFallbackYear is set
+    // (e.g. MLB off-season: actual stats are 2025 but 2026 projections use "102026").
     proj: {
-      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`10${statsY}`, `00${statsY}`] },
+      filterStatsForTopScoringPeriodIds: { value: 2, additionalValue: [`10${y}`, `00${statsY}`] },
     },
   };
 

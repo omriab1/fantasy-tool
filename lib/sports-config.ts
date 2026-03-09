@@ -1,4 +1,4 @@
-import { DEFAULT_SCORING_CONFIG, NHL_STAT_MAP, NHL_DISPLAY_ORDER, NHL_DEFAULT_SCORING_CONFIG } from "./scoring-config";
+import { DEFAULT_SCORING_CONFIG, NHL_STAT_MAP, NHL_DISPLAY_ORDER, NHL_DEFAULT_SCORING_CONFIG, MLB_STAT_MAP, MLB_DISPLAY_ORDER, MLB_DEFAULT_SCORING_CONFIG } from "./scoring-config";
 import type { EspnSport, LeagueScoringConfig, ScoringCat, StatsWindow } from "./types";
 
 // WNBA is a points-only league on ESPN. This fallback is used when the live
@@ -106,7 +106,51 @@ const NHL_POS_MAP: Record<number, string> = {
   5: "G",
 };
 
-// Placeholder empty maps for sports not yet fully configured (Phases B/D)
+// ── MLB position maps ──────────────────────────────────────────────────────────
+// Confirmed from ESPN Fantasy Baseball API (league 128408842, seasons 2025/2026).
+// defaultPositionId: 1=SP, 2=C, 3=1B, 4=2B, 5=3B, 6=SS, 7=OF(LF), 8=OF(CF), 9=OF(RF), 10=DH, 11=RP
+// eligibleSlots confirmed from live API:
+//   Tyler Anderson (SP):   [13, 14, 16, 17]  → 14=SP, 13=P-flex
+//   Relief pitchers (RP):  [13, 15, 16, 17]  → 15=RP, 13=P-flex
+//   Adrian Houser (SP/RP): [13, 14, 15, 16, 17]
+//   Marcus Semien (2B):    [2, 6, 19, 12, 16, 17]
+//   Stuart Fairchild (OF): [9, 10, 5, 12, 16, 17]  → 5=OF, 10=DH, 9=extra OF
+//   Gabriel Arias (3B):    [3, 4, 6, 7, 19, 12, 16, 17, 2]
+// Slot semantics:
+//   0=C, 1=1B, 2=2B, 3=3B, 4=SS, 5=OF — position slots
+//   10=DH — DH slot (universal DH since 2022; players with enough DH appearances get this eligibility)
+//   6=MI(2B/SS), 7=CI(1B/3B), 8=UTIL, 9=extra OF, 12=batter-UTIL, 19=IF-flex — flex/omitted
+//   13=P-flex, 14=SP, 15=RP — pitcher slots
+//   16=BN, 17=IL — bench/IR, omitted
+const MLB_SLOT_POS: Record<number, string> = {
+  0: "C",
+  1: "1B",
+  2: "2B",
+  3: "3B",
+  4: "SS",
+  5: "OF",
+  10: "DH",
+  14: "SP",
+  15: "RP",
+  // 13=P-flex omitted (all pitchers have it — would redundantly add "P" alongside SP/RP)
+  // 9=extra OF omitted (already captured by defaultPosMap "OF")
+};
+
+const MLB_POS_MAP: Record<number, string> = {
+  1:  "SP",
+  2:  "C",
+  3:  "1B",
+  4:  "2B",
+  5:  "3B",
+  6:  "SS",
+  7:  "OF",  // LF
+  8:  "OF",  // CF
+  9:  "OF",  // RF
+  10: "DH",
+  11: "RP",
+};
+
+// Placeholder empty maps for sports not yet fully configured (NFL)
 const EMPTY_MAP: Record<number, string> = {};
 
 export const SPORT_CONFIGS: Record<EspnSport, SportConfig> = {
@@ -145,12 +189,16 @@ export const SPORT_CONFIGS: Record<EspnSport, SportConfig> = {
     name: "MLB",
     emoji: "⚾",
     seasonYear: 2026,
+    statsFallbackYear: 2025, // 2026 season starts late March — use 2025 stats until then
     cdnLeague: "mlb",
     availableWindows: ["season", "30", "15", "7", "proj"],
-    slotPosMap: EMPTY_MAP,
-    defaultPosMap: EMPTY_MAP,
-    irSlotIds: [],
-    defaultScoringConfig: DEFAULT_SCORING_CONFIG,
+    slotPosMap: MLB_SLOT_POS,
+    defaultPosMap: MLB_POS_MAP,
+    irSlotIds: [17],  // 17=IL (bench=16 stays in roster; SP=14 and RP=15 were previously wrong here)
+    defaultScoringConfig: MLB_DEFAULT_SCORING_CONFIG,
+    statMap: MLB_STAT_MAP,
+    statDisplayOrder: MLB_DISPLAY_ORDER,
+    gpStatId: 32,  // baseball GP = stat ID 32
   },
   // NHL — Phase C: fully configured (positions + stat IDs confirmed from live ESPN API)
   fhl: {
@@ -190,6 +238,7 @@ export const SPORT_CONFIGS: Record<EspnSport, SportConfig> = {
 export function getStatsWindowNote(cfg: SportConfig, window: StatsWindow): string | null {
   if (!cfg.statsFallbackYear || cfg.statsFallbackYear >= cfg.seasonYear) return null;
   if (window === "season") return `Showing ${cfg.statsFallbackYear} season stats — the ${cfg.name} ${cfg.seasonYear} season hasn't started yet`;
-  if (window === "proj") return `ESPN ${cfg.seasonYear} projections aren't available yet`;
+  // proj: ESPN often has pre-season projections even before opening day — don't block, let the fetch decide.
+  if (window === "proj") return null;
   return `${window}-day stats aren't available yet — the ${cfg.name} ${cfg.seasonYear} season hasn't started`;
 }

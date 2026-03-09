@@ -75,6 +75,9 @@ export interface PlayerStats {
   fta: number;
   threepa: number;
   gp: number;
+  /** ESPN pre-computed per-game fantasy points average for this player/window (points leagues only) */
+  appliedAverage?: number;
+  injuryStatus?: string;
   /** Full ESPN stats dict — every stat ID available for dynamic league support */
   rawStats: Record<number, number>;
 }

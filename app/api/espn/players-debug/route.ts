@@ -67,10 +67,10 @@ export async function GET(req: NextRequest) {
       ) as Record<string, unknown> | undefined;
       const statsArr = (playerInfo?.stats ?? []) as unknown[];
 
-      // Collect unique defaultPositionId and eligibleSlots values across first 20 players
-      const posIdSamples = new Map<number, string>();
+      // Per-player position breakdown for first 15 players
+      const perPlayerPos: Array<{ name: string; defaultPositionId: number | null; eligibleSlots: number[]; slotSource: string }> = [];
       const slotIdSamples = new Set<number>();
-      for (const p of arr.slice(0, 20)) {
+      for (const p of arr.slice(0, 15)) {
         const pe = p as Record<string, unknown>;
         const pPool = pe.playerPoolEntry as Record<string, unknown> | undefined;
         const pi = (
@@ -79,13 +79,15 @@ export async function GET(req: NextRequest) {
           (pe.fullName !== undefined ? pe : undefined)
         ) as Record<string, unknown> | undefined;
         if (!pi) continue;
-        const defPos = pi.defaultPositionId as number | undefined;
-        if (defPos !== undefined) posIdSamples.set(defPos, pi.fullName as string ?? "?");
-        const slots = (
-          (pi.eligibleSlots as number[] | undefined) ??
-          (pe.eligibleSlots as number[] | undefined) ?? []
-        );
+        const defPos = (pi.defaultPositionId as number | undefined) ?? null;
+        // Try all known eligibleSlots locations and report which one had data
+        const fromPlayer = pi.eligibleSlots as number[] | undefined;
+        const fromPool = pPool?.eligibleSlots as number[] | undefined;
+        const fromEntry = pe.eligibleSlots as number[] | undefined;
+        const slots = fromPlayer ?? fromPool ?? fromEntry ?? [];
+        const slotSource = fromPlayer ? "player" : fromPool ? "poolEntry" : fromEntry ? "entry" : "none";
         for (const s of slots) slotIdSamples.add(s);
+        perPlayerPos.push({ name: pi.fullName as string ?? "?", defaultPositionId: defPos, eligibleSlots: slots, slotSource });
       }
 
       return {
@@ -95,8 +97,8 @@ export async function GET(req: NextRequest) {
         firstEntryKeys: firstKeys,
         firstPlayerName: playerInfo?.fullName ?? null,
         firstPlayerStatsCount: statsArr.length,
-        // Position discovery
-        defaultPositionIdSamples: Object.fromEntries(posIdSamples),
+        // Per-player position info
+        perPlayerPositions: perPlayerPos,
         eligibleSlotIdsSeen: [...slotIdSamples].sort((a, b) => a - b),
         // Show all stats entries with their key fields so we can see seasonId/statSourceId/statSplitTypeId
         firstPlayerStatsSummary: statsArr.map((s) => {

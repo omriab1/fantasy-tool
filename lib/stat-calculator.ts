@@ -21,13 +21,18 @@ export function aggregateStats(players: PlayerStats[], config: LeagueScoringConf
     const pointValues = config.pointValues ?? {};
     let totalFPts = 0;
     for (const p of players) {
-      const gp = Math.max(p.gp, 1);
-      let fpts = 0;
-      for (const [sidStr, ptVal] of Object.entries(pointValues)) {
-        const sid = parseInt(sidStr, 10);
-        fpts += (p.rawStats[sid] ?? 0) * ptVal;
+      if (p.appliedAverage != null) {
+        // Use ESPN's pre-computed per-game average directly — most accurate, avoids GP estimation.
+        totalFPts += p.appliedAverage;
+      } else {
+        const gp = Math.max(p.gp, 1);
+        let fpts = 0;
+        for (const [sidStr, ptVal] of Object.entries(pointValues)) {
+          const sid = parseInt(sidStr, 10);
+          fpts += (p.rawStats[sid] ?? 0) * ptVal;
+        }
+        totalFPts += fpts / gp;
       }
-      totalFPts += fpts / gp; // per-game contribution per player
     }
     return { FPts: totalFPts };
   }
