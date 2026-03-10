@@ -303,6 +303,18 @@ export async function GET(req: NextRequest) {
   }
 
   if (playerKeys.length === 0) {
+    // Check if the league is pre-draft so we can give a clear error
+    try {
+      const fc = (JSON.parse(rosterRawSnippet + '"}]}]}') as Record<string, unknown>)?.fantasy_content;
+      void fc; // just for linting
+    } catch { /* ignore */ }
+    const isPredraft = rosterRawSnippet.includes('"predraft"');
+    if (isPredraft) {
+      return NextResponse.json(
+        { error: "This Yahoo league hasn't been drafted yet and has no rosters. Please connect your active NBA fantasy league." },
+        { status: 422 }
+      );
+    }
     return NextResponse.json([]);
   }
 
