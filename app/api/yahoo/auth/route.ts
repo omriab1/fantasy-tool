@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("language", "en-us");
+  authUrl.searchParams.set("state", Math.random().toString(36).slice(2));
 
   // Debug: return the URL as JSON to verify it's correct
   const { searchParams } = new URL(req.url);
