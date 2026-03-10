@@ -78,7 +78,9 @@ export interface PlayerStats {
   /** ESPN pre-computed per-game fantasy points average for this player/window (points leagues only) */
   appliedAverage?: number;
   injuryStatus?: string;
-  /** Full ESPN stats dict — every stat ID available for dynamic league support */
+  /** Player headshot URL (set by Yahoo; ESPN uses id-based ESPN CDN URL) */
+  headshotUrl?: string;
+  /** Full stats dict — every stat ID available for dynamic league support */
   rawStats: Record<number, number>;
 }
 
@@ -169,7 +171,7 @@ export interface SavedLeague {
   label?: string;
 }
 
-export type StatsWindow = "season" | "30" | "15" | "7" | "proj";
+export type StatsWindow = "season" | "30" | "15" | "14" | "7" | "proj";
 
 // ─── Yahoo / Multi-provider types ─────────────────────────────────────────────
 

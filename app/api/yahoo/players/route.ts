@@ -65,6 +65,7 @@ interface ParsedPlayer {
   name: string;
   teamAbbrev: string;
   position: string;
+  imageUrl: string;
   rawStats: Record<number, number>;
   gp: number;
 }
@@ -87,6 +88,7 @@ function parsePlayersObj(playersObj: Record<string, unknown>): ParsedPlayer[] {
     let name = "Unknown";
     let teamAbbrev = "";
     let position = "";
+    let imageUrl = "";
 
     if (Array.isArray(metaArr)) {
       for (const m of metaArr) {
@@ -95,8 +97,10 @@ function parsePlayersObj(playersObj: Record<string, unknown>): ParsedPlayer[] {
         if (mObj.player_key) playerKey = String(mObj.player_key);
         if (mObj.full_name) name = String(mObj.full_name);
         if (mObj.editorial_team_abbr) teamAbbrev = String(mObj.editorial_team_abbr).toUpperCase();
-        if (mObj.primary_position) position = String(mObj.primary_position);
-        if (mObj.display_position && !position) position = String(mObj.display_position);
+        // Prefer display_position (e.g. "PG,SG") over primary_position (e.g. "PG")
+        if (mObj.display_position) position = String(mObj.display_position);
+        else if (mObj.primary_position) position = String(mObj.primary_position);
+        if (mObj.image_url) imageUrl = String(mObj.image_url);
         if (mObj.name && typeof mObj.name === "object") {
           const nameObj = mObj.name as Record<string, unknown>;
           if (nameObj.full) name = String(nameObj.full);
@@ -135,7 +139,7 @@ function parsePlayersObj(playersObj: Record<string, unknown>): ParsedPlayer[] {
 
     if (gp === 0 && rawStats[YAHOO_STAT.GP]) gp = rawStats[YAHOO_STAT.GP];
 
-    results.push({ playerKey, name, teamAbbrev, position, rawStats, gp });
+    results.push({ playerKey, name, teamAbbrev, position, imageUrl, rawStats, gp });
   }
   return results;
 }
@@ -249,6 +253,7 @@ export async function GET(req: NextRequest) {
       fta:     rs[YAHOO_STAT.FTA]  ?? 0,
       threepa: rs[YAHOO_STAT.TPA]  ?? 0,
       gp:      p.gp,
+      headshotUrl: p.imageUrl || undefined,
       rawStats: rs,
     };
   });

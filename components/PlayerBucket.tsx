@@ -27,7 +27,7 @@ export function PlayerBucket({ label, players, onRemove, accentClass = "border-w
               <div className="relative shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`https://a.espncdn.com/i/headshots/${cdn}/players/full/${p.playerId}.png`}
+                  src={p.headshotUrl ?? `https://a.espncdn.com/i/headshots/${cdn}/players/full/${p.playerId}.png`}
                   alt=""
                   className="w-8 h-8 rounded-full object-cover bg-white/10"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}

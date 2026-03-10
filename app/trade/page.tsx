@@ -119,7 +119,7 @@ export default function TradePage() {
         <StatsWindowTabs
           value={statsWindow}
           onChange={setStatsWindow}
-          availableWindows={sportConfig.availableWindows}
+          availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
           size="md"
         />
       </div>

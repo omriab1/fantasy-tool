@@ -12,6 +12,7 @@ const SPLIT_TYPE: Record<StatsWindow, number> = {
   season: 0,
   "30": 3,
   "15": 2,
+  "14": 2,  // Yahoo 14-day maps to same ESPN split as 15-day (unused by ESPN hook)
   "7": 1,
   proj: 0,  // projections use split type 0 (full-season), but statSourceId 1
 };

@@ -43,7 +43,7 @@ export function useYahooPlayers(
     const accessToken = localStorage.getItem("yahoo_access_token") ?? "";
     if (!leagueKey || (!b && !accessToken)) return;
 
-    const key = yahooCacheKey("players_v1", leagueKey, `nba_${window}`);
+    const key = yahooCacheKey("players_v2", leagueKey, `nba_${window}`);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) {
       setPlayers(cached);
@@ -87,7 +87,7 @@ export function useYahooPlayers(
   // Switch window from cache instantly if available
   useEffect(() => {
     if (!leagueKey || !b) return;
-    const key = yahooCacheKey("players_v1", leagueKey, `nba_${window}`);
+    const key = yahooCacheKey("players_v2", leagueKey, `nba_${window}`);
     const cached = cacheGet<PlayerStats[]>(key);
     if (cached) setPlayers(cached);
   }, [leagueKey, b, window]);
