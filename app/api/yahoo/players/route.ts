@@ -222,6 +222,7 @@ export async function GET(req: NextRequest) {
   // ── Step 2: Batch-fetch stats for collected keys ─────────────────────────────
   const allStats = new Map<string, { rawStats: Record<number, number>; gp: number }>();
   const keys = leaguePlayers.map(p => p.key);
+  const debugStep2 = searchParams.get("debug") === "2";
 
   for (let i = 0; i < keys.length; i += PLAYERS_PER_PAGE) {
     const batch = keys.slice(i, i + PLAYERS_PER_PAGE);
@@ -229,6 +230,12 @@ export async function GET(req: NextRequest) {
     const url = `${YAHOO_API_BASE}/players;player_keys=${keysParam};out=stats?stat_type=${statType}&format=json`;
     try {
       const res = await yahooFetch(url, accessToken, b, t);
+      if (debugStep2 && i === 0) {
+        const raw = await res.text();
+        let parsed: unknown;
+        try { parsed = JSON.parse(raw); } catch { parsed = raw.slice(0, 500); }
+        return NextResponse.json({ step: "stats", url, status: res.status, statType, raw: parsed });
+      }
       if (!res.ok) continue;
       const data = JSON.parse(await res.text());
       const statsMap = parseStatsResponse(data);
