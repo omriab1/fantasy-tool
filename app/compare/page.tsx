@@ -50,6 +50,7 @@ export default function ComparePage() {
   const [yahooLeagueKey, setYahooLeagueKey] = useState("");
   const [yahooB, setYahooB] = useState("");
   const [yahooT, setYahooT] = useState("");
+  const [yahooAccessToken, setYahooAccessToken] = useState("");
 
   // Mode
   const [mode, setMode] = useState<AnalysisMode>("weeks");
@@ -90,6 +91,7 @@ export default function ComparePage() {
       setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
       setYahooB(localStorage.getItem("yahoo_b") ?? "");
       setYahooT(localStorage.getItem("yahoo_t") ?? "");
+      setYahooAccessToken(localStorage.getItem("yahoo_access_token") ?? "");
     }
     readSettings();
     window.addEventListener("fantasy-settings-changed", readSettings);
@@ -252,7 +254,9 @@ export default function ComparePage() {
 
   const handleCompare = mode === "weeks" ? handleWeeksCompare : handleRosterCompare;
 
-  const noSettings = !leagueId || !espnS2 || !swid;
+  const noSettings = provider === "yahoo"
+    ? !yahooLeagueKey || (!yahooB && !yahooAccessToken)
+    : !leagueId || !espnS2 || !swid;
   const teamAWins = results?.filter((r) => r.winner === "giving").length ?? 0;
   const teamBWins = results?.filter((r) => r.winner === "receiving").length ?? 0;
   const numWeeks = endPeriod - startPeriod + 1;

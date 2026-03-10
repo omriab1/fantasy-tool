@@ -33,6 +33,7 @@ export default function TradePage() {
   const [yahooLeagueKey, setYahooLeagueKey] = useState("");
   const [yahooB, setYahooB] = useState("");
   const [yahooT, setYahooT] = useState("");
+  const [yahooAccessToken, setYahooAccessToken] = useState("");
 
   const [givingIds, setGivingIds] = useState<number[]>([]);
   const [receivingIds, setReceivingIds] = useState<number[]>([]);
@@ -52,6 +53,7 @@ export default function TradePage() {
       setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
       setYahooB(localStorage.getItem("yahoo_b") ?? "");
       setYahooT(localStorage.getItem("yahoo_t") ?? "");
+      setYahooAccessToken(localStorage.getItem("yahoo_access_token") ?? "");
     }
     readSettings();
     window.addEventListener("fantasy-settings-changed", readSettings);
@@ -97,7 +99,9 @@ export default function TradePage() {
   }, [giving, receiving, givingIds, receivingIds, players, scoringConfig]);
 
   const allBucketedIds = [...givingIds, ...receivingIds];
-  const noSettings = !leagueId || !espnS2 || !swid;
+  const noSettings = provider === "yahoo"
+    ? !yahooLeagueKey || (!yahooB && !yahooAccessToken)
+    : !leagueId || !espnS2 || !swid;
   const windowNote = getStatsWindowNote(sportConfig, statsWindow);
   // For off-season sports, hide the player UI on any window other than "season"
   // (e.g. WNBA proj loads 2025 projection data but those stats aren't meaningful for 2026)
@@ -122,7 +126,7 @@ export default function TradePage() {
 
       {noSettings && (
         <div className="mb-6 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 text-sm text-yellow-300">
-          Set your League ID and ESPN credentials in{" "}
+          Set your {provider === "yahoo" ? "Yahoo league key" : "League ID and ESPN credentials"} in{" "}
           <Link href="/settings" className="underline hover:text-yellow-200">Settings</Link>{" "}
           to load player data.
         </div>
