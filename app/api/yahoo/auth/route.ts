@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
-  const clientId = process.env.YAHOO_CLIENT_ID;
+  const clientId = process.env.YAHOO_CLIENT_ID?.trim();
   const host     = req.headers.get("host") ?? "localhost:3001";
   const proto    = host.startsWith("localhost") ? "http" : "https";
   const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${host}`;
