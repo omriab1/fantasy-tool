@@ -1,39 +1,30 @@
 /**
  * Yahoo Fantasy Basketball — stat ID map and scoring config parser.
  *
- * Yahoo NBA stat IDs (confirmed from python-yahoo-fantasy-api community docs
- * and cross-referenced with live Yahoo Fantasy Basketball API responses):
+ * Yahoo NBA stat IDs (confirmed from live /players;out=stats API response,
+ * cross-verified against Tyrese Maxey, Luka Doncic, Nikola Jokic 2024-25 season totals):
  *
- *   5  = FGM  (Field Goals Made) — often returned as "made/attempted" fraction string
- *   6  = FGA  (Field Goals Attempted) — synthetic ID used internally when parsing "X/Y" format
- *   7  = FG%  (computed FGM/FGA)
- *   8  = FTM  (Free Throws Made)
- *   9  = FTA  (Free Throws Attempted)
- *   10 = FT%  (computed FTM/FTA)
- *   11 = 3PM  (3-Pointers Made)
- *   12 = 3PA  (3-Point Attempts) — sometimes absent in totals-only leagues
- *   13 = 3P%  (computed 3PM/3PA)
- *   14 = PTS  (Points per game or season total)
+ *   0  = GP   (Games Played)
+ *   2  = MIN  (Minutes — total, not per game)
+ *   3  = FGA  (Field Goals Attempted)
+ *   4  = FGM  (Field Goals Made)
+ *   5  = FG%  (decimal, e.g. ".461")
+ *   6  = FTA  (Free Throws Attempted)
+ *   7  = FTM  (Free Throws Made)
+ *   8  = FT%  (decimal)
+ *   9  = 3PA  (3-Point Attempts)
+ *   10 = 3PM  (3-Pointers Made)
+ *   11 = 3P%  (decimal)
+ *   12 = PTS  (Points — season total)
+ *   13 = OREB (Offensive Rebounds)
+ *   14 = DREB (Defensive Rebounds)
  *   15 = REB  (Total Rebounds)
- *   16 = OREB (Offensive Rebounds)
- *   17 = DREB (Defensive Rebounds)
- *   18 = AST  (Assists)
- *   19 = STL  (Steals)
- *   20 = BLK  (Blocks)
- *   21 = TO   (Turnovers)
- *   22 = A/TO (Assist-to-Turnover Ratio)
- *   23 = DD   (Double-Doubles)
- *   24 = TD   (Triple-Doubles)
- *   0  = GP   (Games Played) — returned as stat metadata, not always as a stat entry
- *
- * ⚠️  VERIFY: Run GET /fantasy/v2/game/nba/stat_categories?format=json to confirm IDs.
- *
- * NOTE on FG% / FT% / 3P% in Yahoo responses:
- *   Category leagues: stat_id 5 (FG%) value comes as "168/352" (made/attempted fraction).
- *   Points leagues: stats come back as individual numeric values.
- *   The Yahoo players route normalizes this — splitting "X/Y" into two entries:
- *     rawStats[5] = made (e.g. 168), rawStats[6] = attempted (e.g. 352)
- *   Then the FG% compute function does rawStats[5] / rawStats[6].
+ *   16 = AST  (Assists)
+ *   17 = STL  (Steals)
+ *   18 = BLK  (Blocks)
+ *   19 = TO   (Turnovers)
+ *   27 = DD   (Double-Doubles)
+ *   28 = TD   (Triple-Doubles)
  */
 
 import type { ScoringCat, LeagueScoringConfig } from "./types";
@@ -43,27 +34,27 @@ const safe = (n: number, d: number) => (d === 0 ? 0 : n / d);
 // ── Yahoo NBA stat ID constants ───────────────────────────────────────────────
 
 export const YAHOO_STAT = {
-  FGM:  5,   // Field Goals Made (or "FGM/FGA" fraction in category leagues)
-  FGA:  6,   // Field Goals Attempted (synthetic — parsed from the "X/Y" value of stat 5)
-  FG_PCT: 7, // FG% (some leagues may send this as a pre-computed decimal)
-  FTM:  8,   // Free Throws Made (or "FTM/FTA" fraction)
-  FTA:  9,   // Free Throws Attempted (synthetic — parsed from stat 8)
-  FT_PCT: 10,// FT%
-  TPM:  11,  // 3-Pointers Made (sometimes returned as "3PM/3PA")
-  TPA:  12,  // 3-Point Attempts (synthetic)
-  TP_PCT: 13,// 3P%
-  PTS:  14,  // Points
-  REB:  15,  // Total Rebounds
-  OREB: 16,  // Offensive Rebounds
-  DREB: 17,  // Defensive Rebounds
-  AST:  18,  // Assists
-  STL:  19,  // Steals
-  BLK:  20,  // Blocks
-  TO:   21,  // Turnovers
-  ATO:  22,  // Assist-to-Turnover Ratio
-  DD:   23,  // Double-Doubles
-  TD:   24,  // Triple-Doubles
-  GP:   0,   // Games Played (often in metadata, not in per-stat entries)
+  GP:     0,   // Games Played
+  FGA:    3,   // Field Goals Attempted
+  FGM:    4,   // Field Goals Made
+  FG_PCT: 5,   // FG% (decimal, e.g. ".461")
+  FTA:    6,   // Free Throws Attempted
+  FTM:    7,   // Free Throws Made
+  FT_PCT: 8,   // FT% (decimal)
+  TPA:    9,   // 3-Point Attempts
+  TPM:    10,  // 3-Pointers Made
+  TP_PCT: 11,  // 3P% (decimal)
+  PTS:    12,  // Points (season total)
+  OREB:   13,  // Offensive Rebounds
+  DREB:   14,  // Defensive Rebounds
+  REB:    15,  // Total Rebounds
+  AST:    16,  // Assists
+  STL:    17,  // Steals
+  BLK:    18,  // Blocks
+  TO:     19,  // Turnovers
+  ATO:    22,  // Assist-to-Turnover Ratio (unconfirmed)
+  DD:     27,  // Double-Doubles
+  TD:     28,  // Triple-Doubles
 } as const;
 
 /**
@@ -73,7 +64,7 @@ export const YAHOO_STAT = {
  */
 export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
   // ── Percentage stats (volume-weighted) ─────────────────────────────────
-  // FG%: computed as FGM(5) / FGA(6). Yahoo sends stat_id=5 as "168/352" fraction → parsed as [5]=168, [6]=352.
+  // FG%: computed as FGM(4) / FGA(3). Yahoo sends raw counts at stat_id 4 (FGM) and 3 (FGA); FG% decimal at stat_id 5 is ignored.
   [YAHOO_STAT.FGM]: {
     id: "FG%",
     espnStatId: YAHOO_STAT.FGM,
@@ -81,7 +72,7 @@ export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
     compute: (t) => safe(t[YAHOO_STAT.FGM] ?? 0, t[YAHOO_STAT.FGA] ?? 0),
     volumeStatIds: [YAHOO_STAT.FGM, YAHOO_STAT.FGA] as const,
   },
-  // FT%: computed as FTM(8) / FTA(9)
+  // FT%: computed as FTM(7) / FTA(6)
   [YAHOO_STAT.FTM]: {
     id: "FT%",
     espnStatId: YAHOO_STAT.FTM,
@@ -89,7 +80,7 @@ export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
     compute: (t) => safe(t[YAHOO_STAT.FTM] ?? 0, t[YAHOO_STAT.FTA] ?? 0),
     volumeStatIds: [YAHOO_STAT.FTM, YAHOO_STAT.FTA] as const,
   },
-  // 3P%: computed as 3PM(11) / 3PA(12)
+  // 3P%: computed as 3PM(10) / 3PA(9)
   [YAHOO_STAT.TP_PCT]: {
     id: "3P%",
     espnStatId: YAHOO_STAT.TP_PCT,
