@@ -347,7 +347,7 @@ export default function ComparePage() {
                   <StatsWindowTabs
                     value={statsWindow}
                     onChange={setStatsWindow}
-                    availableWindows={sportConfig.availableWindows}
+                    availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                     note={getStatsWindowNote(sportConfig, statsWindow)}
                   />
                 </div>
@@ -426,7 +426,7 @@ export default function ComparePage() {
                       <StatsWindowTabs
                         value={statsWindow}
                         onChange={setStatsWindow}
-                        availableWindows={sportConfig.availableWindows}
+                        availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                         note={getStatsWindowNote(sportConfig, statsWindow)}
                       />
                     </div>

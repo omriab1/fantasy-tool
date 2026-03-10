@@ -195,7 +195,7 @@ export default function TradePage() {
               </p>
               {scoringConfig.cats.some((c) => c.volumeStatIds) && (
                 <p className="text-center text-xs text-gray-700 -mt-2">
-                  {scoringConfig.cats.filter((c) => c.volumeStatIds).map((c) => c.id.replace("%", "").trim()).join(", ")} made/attempted shown as on ESPN · % uses full accuracy
+                  {scoringConfig.cats.filter((c) => c.volumeStatIds).map((c) => c.id.replace("%", "").trim()).join(", ")} made/attempted shown as on {provider === "yahoo" ? "Yahoo" : "ESPN"} · % uses full accuracy
                 </p>
               )}
 
@@ -205,7 +205,7 @@ export default function TradePage() {
                 <StatsWindowTabs
                   value={statsWindow}
                   onChange={setStatsWindow}
-                  availableWindows={sportConfig.availableWindows}
+                  availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                 />
               </div>
 
