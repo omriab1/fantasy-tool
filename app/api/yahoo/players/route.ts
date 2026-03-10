@@ -250,6 +250,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const leagueKey   = searchParams.get("leagueKey");
   const window      = searchParams.get("window") ?? "season";
+  const debug       = searchParams.get("debug") === "1";
   const accessToken = req.headers.get("x-yahoo-access-token") ?? "";
   const b = req.headers.get("x-yahoo-b") ?? "";
   const t = req.headers.get("x-yahoo-t") ?? "";
@@ -269,6 +270,7 @@ export async function GET(req: NextRequest) {
   // Step 1: Fetch teams with rosters to get all player_keys
   const teamsUrl = `${YAHOO_API_BASE}/league/${leagueKey}/teams;out=roster?format=json`;
   let playerKeys: string[] = [];
+  let rosterRawSnippet = "";
 
   try {
     const res = await yahooFetch(teamsUrl, accessToken, b, t);
@@ -286,6 +288,7 @@ export async function GET(req: NextRequest) {
       );
     }
     const text = await res.text();
+    rosterRawSnippet = text.slice(0, 800);
     const data = JSON.parse(text);
     playerKeys = extractPlayerKeysFromRoster(data);
   } catch (err) {
@@ -293,6 +296,10 @@ export async function GET(req: NextRequest) {
       { error: "Network error fetching Yahoo roster", detail: String(err) },
       { status: 502 }
     );
+  }
+
+  if (debug) {
+    return NextResponse.json({ step: "roster", playerKeysCount: playerKeys.length, playerKeysSample: playerKeys.slice(0, 5), rosterRawSnippet, statType });
   }
 
   if (playerKeys.length === 0) {
@@ -308,6 +315,7 @@ export async function GET(req: NextRequest) {
     rawStats: Record<number, number>;
     gp: number;
   }> = [];
+  const batchDebugInfo: Array<{ url: string; status: number; parsed: number }> = [];
 
   for (let i = 0; i < playerKeys.length; i += MAX_PLAYERS_PER_REQUEST) {
     const batch = playerKeys.slice(i, i + MAX_PLAYERS_PER_REQUEST);
@@ -316,15 +324,23 @@ export async function GET(req: NextRequest) {
 
     try {
       const res = await yahooFetch(statsUrl, accessToken, b, t);
-      if (!res.ok) continue; // skip failed batches — still return other data
+      if (!res.ok) {
+        batchDebugInfo.push({ url: statsUrl.slice(0, 200), status: res.status, parsed: 0 });
+        continue; // skip failed batches — still return other data
+      }
 
       const text = await res.text();
       const data = JSON.parse(text);
       const parsed = parsePlayersWithStats(data);
+      batchDebugInfo.push({ url: statsUrl.slice(0, 200), status: res.status, parsed: parsed.length });
       allPlayers.push(...parsed);
-    } catch {
-      // skip failed batch
+    } catch (err) {
+      batchDebugInfo.push({ url: statsUrl.slice(0, 200), status: -1, parsed: 0 });
     }
+  }
+
+  if (debug) {
+    return NextResponse.json({ step: "stats", totalPlayers: allPlayers.length, batches: batchDebugInfo });
   }
 
   // Normalize to PlayerStats shape (compatible with aggregateStats/calcTradeScore)
