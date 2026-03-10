@@ -312,7 +312,7 @@ export async function GET(req: NextRequest) {
   for (let i = 0; i < playerKeys.length; i += MAX_PLAYERS_PER_REQUEST) {
     const batch = playerKeys.slice(i, i + MAX_PLAYERS_PER_REQUEST);
     const keysParam = batch.join(",");
-    const statsUrl = `${YAHOO_API_BASE}/players;player_keys=${encodeURIComponent(keysParam)};out=stats?stat_type=${statType}&format=json`;
+    const statsUrl = `${YAHOO_API_BASE}/players;player_keys=${keysParam};out=stats?stat_type=${statType}&format=json`;
 
     try {
       const res = await yahooFetch(statsUrl, accessToken, b, t);
