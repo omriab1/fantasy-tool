@@ -48,18 +48,20 @@ const WINDOW_TO_STAT_TYPE: Record<string, string> = {
   proj:    "season",  // projections not yet supported; fall back to season
 };
 
-async function yahooFetch(url: string, b: string, t: string) {
-  return fetch(url, {
-    headers: {
-      Cookie: `B=${b}; T=${t}`,
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "application/json",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://basketball.fantasysports.yahoo.com/",
-      "Origin": "https://basketball.fantasysports.yahoo.com",
-    },
-    cache: "no-store",
-  });
+async function yahooFetch(url: string, accessToken: string, b: string, t: string) {
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  } else {
+    headers["Cookie"] = `B=${b}; T=${t}`;
+    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    headers["Referer"]    = "https://basketball.fantasysports.yahoo.com/";
+    headers["Origin"]     = "https://basketball.fantasysports.yahoo.com";
+  }
+  return fetch(url, { headers, cache: "no-store" });
 }
 
 /**
@@ -246,17 +248,18 @@ function parsePlayersWithStats(data: unknown): Array<{
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const leagueKey = searchParams.get("leagueKey");
-  const window = searchParams.get("window") ?? "season";
+  const leagueKey   = searchParams.get("leagueKey");
+  const window      = searchParams.get("window") ?? "season";
+  const accessToken = req.headers.get("x-yahoo-access-token") ?? "";
   const b = req.headers.get("x-yahoo-b") ?? "";
   const t = req.headers.get("x-yahoo-t") ?? "";
 
   if (!leagueKey) {
     return NextResponse.json({ error: "Missing leagueKey" }, { status: 400 });
   }
-  if (!b) {
+  if (!accessToken && !b) {
     return NextResponse.json(
-      { error: "Missing Yahoo B cookie. Reconnect via Quick Connect in Settings." },
+      { error: "Not connected to Yahoo. Sign in via Settings → Yahoo." },
       { status: 401 }
     );
   }
@@ -268,7 +271,7 @@ export async function GET(req: NextRequest) {
   let playerKeys: string[] = [];
 
   try {
-    const res = await yahooFetch(teamsUrl, b, t);
+    const res = await yahooFetch(teamsUrl, accessToken, b, t);
     if (!res.ok) {
       const body = await res.text();
       if (res.status === 401 || res.status === 403) {
@@ -312,7 +315,7 @@ export async function GET(req: NextRequest) {
     const statsUrl = `${YAHOO_API_BASE}/players;player_keys=${encodeURIComponent(keysParam)};out=stats?stat_type=${statType}&format=json`;
 
     try {
-      const res = await yahooFetch(statsUrl, b, t);
+      const res = await yahooFetch(statsUrl, accessToken, b, t);
       if (!res.ok) continue; // skip failed batches — still return other data
 
       const text = await res.text();

@@ -130,7 +130,7 @@ export function NavTabs() {
                       }`}
                     >
                       <span className={`text-xs ${provider === p ? "text-green-400" : "text-transparent"}`}>✓</span>
-                      <span className="capitalize font-medium">{p}</span>
+                      <span className="font-medium">{p === "espn" ? "ESPN" : "Yahoo"}</span>
                     </button>
                   ))}
                 </div>
@@ -195,13 +195,13 @@ export function NavTabs() {
                 <button
                   key={p}
                   onClick={() => { switchProvider(p); setOpen(false); }}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold capitalize transition-colors ${
+                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
                     provider === p
                       ? "bg-[#e8193c] text-white"
                       : "text-gray-400 hover:text-white border border-white/10"
                   }`}
                 >
-                  {p}
+                  {p === "espn" ? "ESPN" : "Yahoo"}
                 </button>
               ))}
             </div>

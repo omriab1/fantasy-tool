@@ -40,7 +40,8 @@ export function useYahooPlayers(
   const cfg = YAHOO_SPORT_CONFIGS.nba;
 
   const load = useCallback(() => {
-    if (!leagueKey || !b) return;
+    const accessToken = localStorage.getItem("yahoo_access_token") ?? "";
+    if (!leagueKey || (!b && !accessToken)) return;
 
     const key = yahooCacheKey("players_v1", leagueKey, `nba_${window}`);
     const cached = cacheGet<PlayerStats[]>(key);
@@ -52,9 +53,13 @@ export function useYahooPlayers(
     setLoading(true);
     setError(null);
 
+    const authHeaders: Record<string, string> = accessToken
+      ? { "x-yahoo-access-token": accessToken }
+      : { "x-yahoo-b": b, "x-yahoo-t": t };
+
     fetch(
       `/api/yahoo/players?leagueKey=${encodeURIComponent(leagueKey)}&window=${encodeURIComponent(window)}`,
-      { headers: { "x-yahoo-b": b, "x-yahoo-t": t } }
+      { headers: authHeaders }
     )
       .then(async (res) => {
         if (!res.ok) {

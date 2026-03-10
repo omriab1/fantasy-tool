@@ -108,12 +108,15 @@ export default function SettingsPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // ── Yahoo state ───────────────────────────────────────────────────────────
+  const [yahooAccessToken, setYahooAccessToken] = useState("");
+  const [yahooLeagueUrl, setYahooLeagueUrl] = useState("");
   const [yahooLeagueKey, setYahooLeagueKey] = useState("");
   const [yahooB, setYahooB] = useState("");
   const [yahooT, setYahooT] = useState("");
   const [yahooSaved, setYahooSaved] = useState(false);
   const [yahooClickedBookmark, setYahooClickedBookmark] = useState(false);
   const [yahooAutoResult, setYahooAutoResult] = useState<{ b: boolean; leagueKey: boolean } | null>(null);
+  const [yahooOAuthError, setYahooOAuthError] = useState<string | null>(null);
   const [yahooSavedConnectedInfo, setYahooSavedConnectedInfo] = useState<ConnectedInfo | null>(null);
   const [yahooLeagues, setYahooLeagues] = useState<YahooSavedLeague[]>([]);
   const [yahooEditingKey, setYahooEditingKey] = useState<string | null>(null);
@@ -130,32 +133,75 @@ export default function SettingsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    // Yahoo Quick Connect: ?yahoo_auto=1&b=...&t=...&league_key=...
+    // Yahoo OAuth callback OR legacy cookie: ?yahoo_auto=1&...
     if (params.get("yahoo_auto") === "1") {
-      const paramB         = params.get("b") ?? "";
-      const paramT         = params.get("t") ?? "";
-      const paramLeagueKey = params.get("league_key") ?? "";
+      const paramAccessToken  = params.get("yahoo_access_token") ?? "";
+      const paramRefreshToken = params.get("yahoo_refresh_token") ?? "";
+      const paramExpires      = params.get("yahoo_token_expires") ?? "";
+      const paramLeagueKey    = params.get("league_key") ?? "";
+      const paramAllKeys      = params.get("all_league_keys") ?? "";
+      // Legacy cookie params (kept as fallback)
+      const paramB = params.get("b") ?? "";
+      const paramT = params.get("t") ?? "";
 
       setSettingsTab("yahoo");
-      setYahooB(paramB || localStorage.getItem("yahoo_b") || "");
-      setYahooT(paramT || localStorage.getItem("yahoo_t") || "");
-      setYahooLeagueKey(paramLeagueKey || localStorage.getItem("yahoo_league_key_nba") || "");
-      setYahooAutoResult({ b: !!paramB, leagueKey: !!paramLeagueKey });
 
-      if (paramB && paramLeagueKey) {
-        localStorage.setItem("yahoo_b", paramB);
-        if (paramT) localStorage.setItem("yahoo_t", paramT);
-        localStorage.setItem("yahoo_league_key_nba", paramLeagueKey);
-        appendYahooLeague(paramLeagueKey);
+      if (paramAccessToken) {
+        // ── OAuth path ──────────────────────────────────────────────────────
+        setYahooAccessToken(paramAccessToken);
+        localStorage.setItem("yahoo_access_token", paramAccessToken);
+        if (paramRefreshToken) localStorage.setItem("yahoo_refresh_token", paramRefreshToken);
+        if (paramExpires)      localStorage.setItem("yahoo_token_expires", paramExpires);
+
+        const key = paramLeagueKey || localStorage.getItem("yahoo_league_key_nba") || "";
+        if (key) {
+          setYahooLeagueKey(key);
+          localStorage.setItem("yahoo_league_key_nba", key);
+          appendYahooLeague(key);
+        }
+        // Register any additional leagues found
+        if (paramAllKeys) {
+          for (const k of paramAllKeys.split(",").filter(Boolean)) appendYahooLeague(k);
+        }
+
         setYahooSaved(true);
-        // Switch global provider to Yahoo
         localStorage.setItem("fantasy_provider", "yahoo");
         window.dispatchEvent(new Event("fantasy-settings-changed"));
+      } else if (paramB) {
+        // ── Legacy cookie path ──────────────────────────────────────────────
+        setYahooB(paramB);
+        setYahooT(paramT);
+        setYahooLeagueKey(paramLeagueKey || localStorage.getItem("yahoo_league_key_nba") || "");
+        setYahooAutoResult({ b: !!paramB, leagueKey: !!paramLeagueKey });
+
+        if (paramLeagueKey) {
+          localStorage.setItem("yahoo_b", paramB);
+          if (paramT) localStorage.setItem("yahoo_t", paramT);
+          localStorage.setItem("yahoo_league_key_nba", paramLeagueKey);
+          appendYahooLeague(paramLeagueKey);
+          setYahooSaved(true);
+          localStorage.setItem("fantasy_provider", "yahoo");
+          window.dispatchEvent(new Event("fantasy-settings-changed"));
+        }
       }
 
       setYahooLeagues(loadYahooLeagues());
       window.history.replaceState({}, "", "/settings");
       return;
+    }
+
+    // Yahoo OAuth error: ?yahoo_error=...
+    if (params.get("yahoo_error")) {
+      const errCode = params.get("yahoo_error") ?? "unknown";
+      const errMessages: Record<string, string> = {
+        no_code:               "Yahoo sign-in was cancelled or failed. Please try again.",
+        not_configured:        "Yahoo OAuth is not configured. Add YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET to .env.local.",
+        token_exchange_failed: "Yahoo returned an error when exchanging the auth code. Check your client credentials.",
+        callback_error:        "An unexpected error occurred during Yahoo sign-in.",
+      };
+      setYahooOAuthError(errMessages[errCode] ?? `Yahoo sign-in failed (${errCode}).`);
+      setSettingsTab("yahoo");
+      window.history.replaceState({}, "", "/settings");
     }
 
     // ESPN Quick Connect: ?auto=1&s2=...&swid=...&leagueId=...&sport=...
@@ -276,6 +322,7 @@ export default function SettingsPage() {
     }
 
     // Always restore Yahoo state
+    setYahooAccessToken(localStorage.getItem("yahoo_access_token") ?? "");
     setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
     setYahooB(localStorage.getItem("yahoo_b") ?? "");
     setYahooT(localStorage.getItem("yahoo_t") ?? "");
@@ -284,6 +331,16 @@ export default function SettingsPage() {
     // Sync settings tab to active provider
     const provider = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
     setSettingsTab(provider === "yahoo" ? "yahoo" : "espn");
+  }, []);
+
+  // Sync settings tab when provider changes from navbar
+  useEffect(() => {
+    function syncTab() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setSettingsTab(p === "yahoo" ? "yahoo" : "espn");
+    }
+    window.addEventListener("fantasy-settings-changed", syncTab);
+    return () => window.removeEventListener("fantasy-settings-changed", syncTab);
   }, []);
 
   // Persist sport immediately when it changes
@@ -456,9 +513,9 @@ export default function SettingsPage() {
 
   // Yahoo auto-save when league loads
   useEffect(() => {
-    if (!yahooLeague || !yahooLeagueKey || !yahooB) return;
+    if (!yahooLeague || !yahooLeagueKey || (!yahooB && !yahooAccessToken)) return;
     localStorage.setItem("yahoo_league_key_nba", yahooLeagueKey);
-    localStorage.setItem("yahoo_b", yahooB);
+    if (yahooB) localStorage.setItem("yahoo_b", yahooB);
     if (yahooT) localStorage.setItem("yahoo_t", yahooT);
     setYahooLeagues(prev => {
       if (prev.find(l => l.key === yahooLeagueKey)) return prev;
@@ -511,9 +568,9 @@ export default function SettingsPage() {
     const key = yahooLeagueKey.trim();
     const b   = yahooB.trim();
     const t   = yahooT.trim();
-    if (!key || !b) return;
+    if (!key || (!b && !yahooAccessToken)) return;
     localStorage.setItem("yahoo_league_key_nba", key);
-    localStorage.setItem("yahoo_b", b);
+    if (b) localStorage.setItem("yahoo_b", b);
     if (t) localStorage.setItem("yahoo_t", t);
     setYahooLeagues(prev => {
       if (prev.find(l => l.key === key)) return prev;
@@ -527,11 +584,15 @@ export default function SettingsPage() {
   }
 
   function disconnectYahoo() {
+    localStorage.removeItem("yahoo_access_token");
+    localStorage.removeItem("yahoo_refresh_token");
+    localStorage.removeItem("yahoo_token_expires");
     localStorage.removeItem("yahoo_b");
     localStorage.removeItem("yahoo_t");
     localStorage.removeItem("yahoo_league_key_nba");
     localStorage.removeItem("yahoo_leagues_nba");
     localStorage.removeItem("yahoo_last_connected_nba");
+    setYahooAccessToken("");
     setYahooB("");
     setYahooT("");
     setYahooLeagueKey("");
@@ -641,7 +702,7 @@ export default function SettingsPage() {
 
   const allAutoDetected = autoResult?.s2 && autoResult?.swid && autoResult?.leagueId;
   const partialAutoDetected = autoResult && !allAutoDetected;
-  const yahooConnected = !!(yahooLeague || (yahooSavedConnectedInfo && yahooLeagueKey && yahooB));
+  const yahooConnected = !!(yahooLeague || (yahooSavedConnectedInfo && yahooLeagueKey && (yahooB || yahooAccessToken)));
   const offSeason = league && league.scoringPeriodId === 0;
 
   return (
@@ -707,7 +768,7 @@ export default function SettingsPage() {
             </p>
             <p className="font-mono text-gray-400 pl-7">{info.label}</p>
             <div className="flex items-center justify-between pl-7 pt-1">
-              <p className="text-gray-600 text-xs">Auth errors? Try reconnecting via Quick Connect below.</p>
+              <p className="text-gray-600 text-xs">Auth errors? Click &quot;Reconnect Yahoo&quot; to sign in again.</p>
               <button onClick={disconnectYahoo} className="text-xs text-red-400/70 hover:text-red-400 transition-colors ml-2 shrink-0">Disconnect</button>
             </div>
           </div>
@@ -753,14 +814,19 @@ export default function SettingsPage() {
           {(["espn", "yahoo"] as SettingsTab[]).map(tab => (
             <button
               key={tab}
-              onClick={() => setSettingsTab(tab)}
-              className={`px-4 py-1.5 rounded-md text-sm font-semibold capitalize transition-colors ${
+              onClick={() => {
+                setSettingsTab(tab);
+                const p: FantasyProvider = tab === "yahoo" ? "yahoo" : "espn";
+                localStorage.setItem("fantasy_provider", p);
+                window.dispatchEvent(new Event("fantasy-settings-changed"));
+              }}
+              className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${
                 settingsTab === tab
                   ? "bg-[#e8193c] text-white"
                   : "text-gray-400 hover:text-white"
               }`}
             >
-              {tab}
+              {tab === "espn" ? "ESPN" : "Yahoo"}
             </button>
           ))}
         </div>
@@ -873,7 +939,7 @@ export default function SettingsPage() {
         {/* ── Yahoo Tab ─────────────────────────────────────── */}
         {settingsTab === "yahoo" && (
           <div className="flex flex-col gap-5">
-            <p className="text-xs text-gray-500 -mt-3">Connect your Yahoo Fantasy Basketball league using the Quick Connect bookmarklet.</p>
+            <p className="text-xs text-gray-500 -mt-3">Connect your Yahoo Fantasy Basketball league using Sign in with Yahoo.</p>
 
             {/* Sport selector — NBA only */}
             <div className="flex flex-col gap-1.5">
@@ -882,42 +948,38 @@ export default function SettingsPage() {
                 <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border bg-[#e8193c] border-[#e8193c] text-white">
                   <span>🏀</span><span>NBA</span>
                 </button>
-                {["WNBA", "NHL", "MLB", "NFL"].map(s => (
-                  <button key={s} disabled className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/5 text-gray-500 cursor-not-allowed">
+                {([
+                  { name: "WNBA", emoji: "🏀" },
+                  { name: "NHL",  emoji: "🏒" },
+                  { name: "MLB",  emoji: "⚾" },
+                  { name: "NFL",  emoji: "🏈" },
+                ] as const).map(s => (
+                  <button key={s.name} disabled className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/5 text-gray-500 cursor-not-allowed">
                     <span className="absolute -top-2 -right-1 text-[9px] bg-[#1a1f2e] border border-amber-500/40 px-1 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
-                    <span>{s}</span>
+                    <span>{s.emoji}</span>
+                    <span>{s.name}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Yahoo Quick Connect */}
-            <div className="border border-white/10 rounded-lg p-4 bg-black/10">
-              <p className="text-sm font-semibold text-white mb-1">Quick Connect — Yahoo</p>
-              <p className="text-xs text-gray-500 mb-4">
-                Drag the button below to your bookmarks bar. Then open your Yahoo Fantasy Basketball league page and click it.
-              </p>
-              <div className="flex flex-wrap items-center gap-4 mb-3">
-                {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-                <a
-                  ref={yahooBookmarkRef}
-                  href="#"
-                  draggable
-                  onClick={(e) => { e.preventDefault(); setYahooClickedBookmark(true); setTimeout(() => setYahooClickedBookmark(false), 3000); }}
-                  className="inline-flex items-center gap-2 bg-[#720e9e] hover:bg-[#5a0b7d] text-white text-sm font-semibold px-4 py-2.5 rounded-lg cursor-grab active:cursor-grabbing select-none transition-colors"
-                >
-                  <span>⚡</span> Yahoo Fantasy Connect
-                </a>
-                <span className="text-xs text-gray-500">← drag to bookmarks bar</span>
+            {/* OAuth error banner */}
+            {yahooOAuthError && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-300 flex items-start justify-between gap-3">
+                <p>{yahooOAuthError}</p>
+                <button onClick={() => setYahooOAuthError(null)} className="text-red-400/60 hover:text-red-300 text-lg leading-none shrink-0 transition-colors">×</button>
               </div>
-              {yahooClickedBookmark && (
-                <p className="text-xs text-yellow-400 mb-2">Don&apos;t click — drag it to your bookmarks bar instead!</p>
-              )}
-              <ol className="list-decimal list-inside space-y-1 text-xs text-gray-400">
-                <li>Drag the button above to your browser&apos;s bookmarks bar</li>
-                <li>Go to <strong className="text-gray-200">basketball.fantasysports.yahoo.com</strong> and open your league</li>
-                <li>Click the bookmark — this page will reload with credentials pre-filled</li>
-              </ol>
+            )}
+
+            {/* Primary CTA: Sign in with Yahoo (OAuth) */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => { window.location.href = "/api/yahoo/auth"; }}
+                className="flex items-center justify-center gap-2 bg-[#720e9e] hover:bg-[#5a0b7d] text-white font-semibold py-3 px-6 rounded-lg transition-colors w-full text-base"
+              >
+                <span>🔑</span> {yahooAccessToken ? "Reconnect Yahoo" : "Sign in with Yahoo"}
+              </button>
+              <p className="text-xs text-gray-500">Redirects to Yahoo to authorize. Your league is fetched automatically.</p>
             </div>
 
             {/* Yahoo league dropdown */}
@@ -970,15 +1032,77 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Yahoo Manual / Advanced fields */}
-            <details>
-              <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-300 select-none">
-                Manual / Advanced — paste credentials directly
+            {/* Manual / Advanced — collapsible */}
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-300 select-none flex items-center gap-1.5">
+                <span className="inline-block transition-transform group-open:rotate-90">▶</span>
+                Or connect manually with cookies (advanced)
               </summary>
-              <div className="mt-3 flex flex-col gap-4">
+              <div className="flex flex-col gap-4 mt-4">
+                {/* Yahoo Quick Connect bookmarklet */}
+                <div className="border border-white/10 rounded-lg p-4 bg-black/10 flex flex-col gap-3">
+                  <p className="text-sm font-semibold text-white">Bookmarklet — Yahoo <span className="text-xs text-gray-500 font-normal ml-1">(for B cookie, if OAuth doesn&apos;t work)</span></p>
+                  <div className="flex items-start gap-2.5">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center mt-0.5">1</span>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs text-gray-300 font-medium">Drag this to your bookmarks bar <span className="text-gray-500">(don&apos;t click — drag it)</span></p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+                        <a
+                          ref={yahooBookmarkRef}
+                          href="#"
+                          draggable
+                          onClick={(e) => e.preventDefault()}
+                          className="inline-flex items-center gap-2 bg-[#720e9e] hover:bg-[#5a0b7d] text-white text-sm font-semibold px-4 py-2.5 rounded-lg cursor-grab active:cursor-grabbing select-none transition-colors"
+                        >
+                          <span>⚡</span> Yahoo Fantasy Connect
+                        </a>
+                        <span className="text-xs text-gray-500">← drag to bookmarks bar</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center mt-0.5">2</span>
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-xs text-gray-300">Open your Yahoo Fantasy Basketball league page</p>
+                      <button
+                        onClick={() => {
+                          setYahooClickedBookmark(true);
+                          window.location.href = "https://basketball.fantasysports.yahoo.com/";
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-300 hover:text-purple-200 transition-colors w-fit"
+                      >
+                        → Open basketball.fantasysports.yahoo.com
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold flex items-center justify-center mt-0.5">3</span>
+                    <p className="text-xs text-gray-300">On your league page, click <strong className="text-gray-200">Yahoo Fantasy Connect</strong> from your bookmarks bar</p>
+                  </div>
+                </div>
+
+                {/* League URL auto-extractor */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-semibold text-white">League URL <span className="text-gray-500 font-normal">(auto-fills League Key)</span></label>
+                  <p className="text-xs text-gray-500">Paste your Yahoo Fantasy Basketball league URL and the League Key will fill automatically.</p>
+                  <input
+                    type="text"
+                    value={yahooLeagueUrl}
+                    onChange={(e) => {
+                      const url = e.target.value;
+                      setYahooLeagueUrl(url);
+                      const m = url.match(/\/nba\/(\d+)/);
+                      if (m) setYahooLeagueKey(`428.l.${m[1]}`);
+                    }}
+                    placeholder="basketball.fantasysports.yahoo.com/nba/123456/team/1"
+                    className="w-full bg-[#0f1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#e8193c]/60 min-w-0"
+                  />
+                </div>
+
                 <Field
                   label="League Key"
-                  hint={`Format: {game_key}.l.{league_id} — e.g. "428.l.19877". Found in your Yahoo league URL.`}
+                  hint='Format: 428.l.{league_id} — auto-filled from the URL above, or enter manually.'
                   value={yahooLeagueKey}
                   onChange={setYahooLeagueKey}
                   placeholder="428.l.19877"
@@ -986,7 +1110,7 @@ export default function SettingsPage() {
                 />
                 <Field
                   label="B Cookie"
-                  hint="Yahoo session cookie — extracted by Quick Connect bookmarklet"
+                  hint="Yahoo session cookie. Yahoo marks this HttpOnly — copy it manually from DevTools (see guide below)."
                   value={yahooB}
                   onChange={setYahooB}
                   placeholder="FH8aD1…"
@@ -994,24 +1118,24 @@ export default function SettingsPage() {
                 />
                 <Field
                   label="T Cookie"
-                  hint="Yahoo login token cookie — extracted by Quick Connect bookmarklet (optional)"
+                  hint="Optional secondary Yahoo cookie. Same DevTools approach as B Cookie."
                   value={yahooT}
                   onChange={setYahooT}
                   placeholder="z=…"
                   mono
                 />
+
+                <div className="flex justify-center mt-1">
+                  <button
+                    onClick={handleYahooSave}
+                    disabled={!yahooLeagueKey || (!yahooB && !yahooAccessToken) || !isValidLeagueKey(yahooLeagueKey)}
+                    className="bg-[#720e9e] hover:bg-[#5a0b7d] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-8 rounded-lg transition-colors"
+                  >
+                    {yahooSaved ? "Saved ✓" : "Save Yahoo Settings"}
+                  </button>
+                </div>
               </div>
             </details>
-
-            <div className="flex justify-center mt-1">
-              <button
-                onClick={handleYahooSave}
-                disabled={!yahooLeagueKey || !yahooB || !isValidLeagueKey(yahooLeagueKey)}
-                className="bg-[#720e9e] hover:bg-[#5a0b7d] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-8 rounded-lg transition-colors"
-              >
-                {yahooSaved ? "Saved ✓" : "Save Yahoo Settings"}
-              </button>
-            </div>
           </div>
         )}
       </div>
@@ -1090,6 +1214,28 @@ export default function SettingsPage() {
             <Step n={6}>Find <Code>espn_s2</Code> in the list — click it, then copy the full value from the bottom pane</Step>
             <Step n={7}>Find <Code>SWID</Code> — copy its value (it looks like <Code>{"{GUID}"}</Code>)</Step>
             <Step n={8}>Paste all three values into the fields above and click <strong className="text-white">Save Settings</strong></Step>
+          </div>
+        </details>
+      )}
+
+      {settingsTab === "yahoo" && (
+        <details className="mt-4 group">
+          <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-300 select-none">
+            How to find your Yahoo B cookie manually (step-by-step)
+          </summary>
+          <div className="mt-3 bg-[#1a1f2e] border border-white/10 rounded-xl p-5 space-y-2.5 text-sm text-gray-400">
+            <p className="text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded p-2">
+              Yahoo marks the B cookie as <strong>HttpOnly</strong> — it cannot be read by JavaScript (including the bookmarklet). You must copy it from DevTools.
+            </p>
+            <Step n={1}>Go to <Code>basketball.fantasysports.yahoo.com/nba</Code> and log in to your Yahoo account</Step>
+            <Step n={2}>Navigate to your league page — the URL will look like <Code>basketball.fantasysports.yahoo.com/nba/<strong>123456</strong>/team/…</Code></Step>
+            <Step n={3}>Paste that URL into the <strong className="text-white">League URL</strong> field above — the League Key fills automatically</Step>
+            <Step n={4}>Press <Kbd>F12</Kbd> to open DevTools</Step>
+            <Step n={5}>Click the <strong className="text-white">Application</strong> tab → expand <strong className="text-white">Cookies</strong> in the left panel</Step>
+            <Step n={6}>Click <Code>https://basketball.fantasysports.yahoo.com</Code> or <Code>https://www.yahoo.com</Code></Step>
+            <Step n={7}>Find the <Code>B</Code> cookie — copy its full value (a long alphanumeric string)</Step>
+            <Step n={8}>Optionally copy the <Code>T</Code> cookie value too</Step>
+            <Step n={9}>Paste B (and T) into the fields above and click <strong className="text-white">Save Yahoo Settings</strong></Step>
           </div>
         </details>
       )}

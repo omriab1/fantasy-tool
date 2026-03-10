@@ -23,23 +23,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 const YAHOO_API_BASE = "https://fantasysports.yahooapis.com/fantasy/v2";
 
-async function yahooFetch(url: string, b: string, t: string) {
-  return fetch(url, {
-    headers: {
-      Cookie: `B=${b}; T=${t}`,
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "application/json",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://basketball.fantasysports.yahoo.com/",
-      "Origin": "https://basketball.fantasysports.yahoo.com",
-    },
-    cache: "no-store",
-  });
+async function yahooFetch(url: string, accessToken: string, b: string, t: string) {
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  } else {
+    headers["Cookie"] = `B=${b}; T=${t}`;
+    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    headers["Referer"]    = "https://basketball.fantasysports.yahoo.com/";
+    headers["Origin"]     = "https://basketball.fantasysports.yahoo.com";
+  }
+  return fetch(url, { headers, cache: "no-store" });
 }
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const leagueKey = searchParams.get("leagueKey");
+  const leagueKey   = searchParams.get("leagueKey");
+  const accessToken = req.headers.get("x-yahoo-access-token") ?? "";
   const b = req.headers.get("x-yahoo-b") ?? "";
   const t = req.headers.get("x-yahoo-t") ?? "";
 
@@ -47,9 +50,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing leagueKey" }, { status: 400 });
   }
 
-  if (!b) {
+  if (!accessToken && !b) {
     return NextResponse.json(
-      { error: "Missing Yahoo B cookie. Reconnect via Quick Connect in Settings." },
+      { error: "Not connected to Yahoo. Sign in via Settings → Yahoo." },
       { status: 401 }
     );
   }
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest) {
   let leagueData: unknown;
 
   try {
-    const res = await yahooFetch(leagueUrl, b, t);
+    const res = await yahooFetch(leagueUrl, accessToken, b, t);
 
     if (!res.ok) {
       const body = await res.text();
@@ -105,7 +108,7 @@ export async function GET(req: NextRequest) {
   let teamsData: unknown;
 
   try {
-    const res = await yahooFetch(teamsUrl, b, t);
+    const res = await yahooFetch(teamsUrl, accessToken, b, t);
     if (res.ok) {
       const text = await res.text();
       try {

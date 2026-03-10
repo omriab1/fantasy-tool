@@ -175,7 +175,8 @@ export function useYahooLeague(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!leagueKey || !b) {
+    const accessToken = localStorage.getItem("yahoo_access_token") ?? "";
+    if (!leagueKey || (!b && !accessToken)) {
       setScoringConfig(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
       setLeague(null);
       return;
@@ -197,8 +198,12 @@ export function useYahooLeague(
     setLoading(true);
     setError(null);
 
+    const authHeaders: Record<string, string> = accessToken
+      ? { "x-yahoo-access-token": accessToken }
+      : { "x-yahoo-b": b, "x-yahoo-t": _t };
+
     fetch(`/api/yahoo/league?leagueKey=${encodeURIComponent(leagueKey)}`, {
-      headers: { "x-yahoo-b": b, "x-yahoo-t": _t },
+      headers: authHeaders,
     })
       .then(async (res) => {
         if (!res.ok) {
