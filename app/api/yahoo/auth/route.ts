@@ -7,11 +7,13 @@
  *   3. Set env vars: YAHOO_CLIENT_ID, YAHOO_CLIENT_SECRET, NEXT_PUBLIC_APP_URL
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const clientId = process.env.YAHOO_CLIENT_ID;
-  const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001";
+  const host     = req.headers.get("host") ?? "localhost:3001";
+  const proto    = host.startsWith("localhost") ? "http" : "https";
+  const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${host}`;
 
   if (!clientId) {
     return NextResponse.json(
