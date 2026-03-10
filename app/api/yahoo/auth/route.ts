@@ -27,7 +27,6 @@ export async function GET(req: NextRequest) {
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "openid fspt-r");
   authUrl.searchParams.set("language", "en-us");
 
   // Debug: return the URL as JSON to verify it's correct
