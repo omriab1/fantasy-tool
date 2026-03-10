@@ -14,8 +14,8 @@ const YAHOO_API_BASE = "https://fantasysports.yahooapis.com/fantasy/v2";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code         = searchParams.get("code");
-  const clientId     = process.env.YAHOO_CLIENT_ID;
-  const clientSecret = process.env.YAHOO_CLIENT_SECRET;
+  const clientId     = process.env.YAHOO_CLIENT_ID?.trim();
+  const clientSecret = process.env.YAHOO_CLIENT_SECRET?.trim();
   const host         = req.headers.get("host") ?? "localhost:3001";
   const proto        = host.startsWith("localhost") ? "http" : "https";
   const appUrl       = process.env.NEXT_PUBLIC_APP_URL ?? `${proto}://${host}`;
