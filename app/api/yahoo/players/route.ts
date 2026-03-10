@@ -175,9 +175,9 @@ export async function GET(req: NextRequest) {
   const leagueKey   = searchParams.get("leagueKey");
   const window      = searchParams.get("window") ?? "season";
   const debug       = searchParams.get("debug") === "1";
-  const accessToken = req.headers.get("x-yahoo-access-token") ?? "";
-  const b = req.headers.get("x-yahoo-b") ?? "";
-  const t = req.headers.get("x-yahoo-t") ?? "";
+  const accessToken = req.headers.get("x-yahoo-access-token") ?? searchParams.get("token") ?? "";
+  const b = req.headers.get("x-yahoo-b") ?? searchParams.get("b") ?? "";
+  const t = req.headers.get("x-yahoo-t") ?? searchParams.get("t") ?? "";
 
   if (!leagueKey) return NextResponse.json({ error: "Missing leagueKey" }, { status: 400 });
   if (!accessToken && !b) {
