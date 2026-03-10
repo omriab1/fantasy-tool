@@ -27,8 +27,13 @@ export async function GET(req: NextRequest) {
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "fspt-r");
   authUrl.searchParams.set("language", "en-us");
+
+  // Debug: return the URL as JSON to verify it's correct
+  const { searchParams } = new URL(req.url);
+  if (searchParams.get("debug") === "1") {
+    return NextResponse.json({ authUrl: authUrl.toString(), redirectUri, appUrl, clientId: clientId.slice(0, 20) + "..." });
+  }
 
   return NextResponse.redirect(authUrl.toString());
 }
