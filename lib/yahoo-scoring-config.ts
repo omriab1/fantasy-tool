@@ -267,20 +267,38 @@ const YAHOO_NAME_TO_STAT_ID: Record<string, number> = {
 };
 
 /**
+ * Yahoo returns "arrays" as objects: { "0": item, "1": item, ..., "count": N }.
+ * This helper normalises both real arrays and that object format to unknown[].
+ */
+function yahooObjToArray(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const count = Number(o.count ?? 0);
+    const result: unknown[] = [];
+    for (let i = 0; i < count; i++) {
+      if (o[String(i)] !== undefined) result.push(o[String(i)]);
+    }
+    return result;
+  }
+  return [];
+}
+
+/**
  * Parse Yahoo league scoring settings into a LeagueScoringConfig.
  */
 export function parseYahooLeagueScoringConfig(yahooSettings: unknown): LeagueScoringConfig {
   try {
     const settings = yahooSettings as Record<string, unknown>;
-    const statCats = (settings?.stat_categories as Record<string, unknown>)?.stats as unknown[];
-    const statMods = (settings?.stat_modifiers as Record<string, unknown>)?.stats as unknown[];
+    const statCats = yahooObjToArray((settings?.stat_categories as Record<string, unknown>)?.stats);
+    const statMods = yahooObjToArray((settings?.stat_modifiers as Record<string, unknown>)?.stats);
 
-    if (!Array.isArray(statCats) || statCats.length === 0) {
+    if (statCats.length === 0) {
       return YAHOO_NBA_DEFAULT_SCORING_CONFIG;
     }
 
     // Check if this is a points league (has stat_modifiers with point values)
-    const isPoints = Array.isArray(statMods) && statMods.length > 0;
+    const isPoints = statMods.length > 0;
 
     if (isPoints) {
       const pointValues: Record<number, number> = {};
