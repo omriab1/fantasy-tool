@@ -144,6 +144,7 @@ function parseYahooLeagueData(data: Record<string, unknown>): LeagueInfo {
     seasonId: season,
     scoringPeriodId: currentWeek,
     teams,
+    name: leagueMeta?.name ? String(leagueMeta.name) : undefined,
   };
 }
 

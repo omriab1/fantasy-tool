@@ -42,3 +42,11 @@ export function clearCache(leagueId: string): void {
     .filter((k) => k.startsWith(prefix) && k.includes(`_${leagueId}_`))
     .forEach((k) => localStorage.removeItem(k));
 }
+
+export function clearYahooCache(leagueKey: string): void {
+  if (typeof window === "undefined") return;
+  const prefix = `yahoo_cache_`;
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(prefix) && k.includes(`_${leagueKey}_`))
+    .forEach((k) => localStorage.removeItem(k));
+}

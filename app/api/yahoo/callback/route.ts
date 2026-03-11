@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
   if (refreshToken) settingsUrl.searchParams.set("yahoo_refresh_token", refreshToken);
   settingsUrl.searchParams.set("yahoo_token_expires", String(expiresMs));
   if (leagueKey) settingsUrl.searchParams.set("league_key", leagueKey);
-  if (allLeagueKeys.length > 1) {
+  if (allLeagueKeys.length > 0) {
     settingsUrl.searchParams.set("all_league_keys", allLeagueKeys.join(","));
   }
 

@@ -23,6 +23,7 @@
  *   17 = STL  (Steals)
  *   18 = BLK  (Blocks)
  *   19 = TO   (Turnovers)
+ *   22 = A/TO (Assist-to-Turnover Ratio — unconfirmed)
  *   27 = DD   (Double-Doubles)
  *   28 = TD   (Triple-Doubles)
  */
@@ -35,6 +36,7 @@ const safe = (n: number, d: number) => (d === 0 ? 0 : n / d);
 
 export const YAHOO_STAT = {
   GP:     0,   // Games Played
+  MIN:    2,   // Minutes played (total)
   FGA:    3,   // Field Goals Attempted
   FGM:    4,   // Field Goals Made
   FG_PCT: 5,   // FG% (decimal, e.g. ".461")
@@ -64,18 +66,18 @@ export const YAHOO_STAT = {
  */
 export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
   // ── Percentage stats (volume-weighted) ─────────────────────────────────
-  // FG%: computed as FGM(4) / FGA(3). Yahoo sends raw counts at stat_id 4 (FGM) and 3 (FGA); FG% decimal at stat_id 5 is ignored.
-  [YAHOO_STAT.FGM]: {
+  // FG%: computed as FGM(4) / FGA(3). Yahoo sends FG% decimal at stat_id 5; we use raw counts.
+  [YAHOO_STAT.FG_PCT]: {
     id: "FG%",
-    espnStatId: YAHOO_STAT.FGM,
+    espnStatId: YAHOO_STAT.FG_PCT,
     lowerIsBetter: false,
     compute: (t) => safe(t[YAHOO_STAT.FGM] ?? 0, t[YAHOO_STAT.FGA] ?? 0),
     volumeStatIds: [YAHOO_STAT.FGM, YAHOO_STAT.FGA] as const,
   },
   // FT%: computed as FTM(7) / FTA(6)
-  [YAHOO_STAT.FTM]: {
+  [YAHOO_STAT.FT_PCT]: {
     id: "FT%",
-    espnStatId: YAHOO_STAT.FTM,
+    espnStatId: YAHOO_STAT.FT_PCT,
     lowerIsBetter: false,
     compute: (t) => safe(t[YAHOO_STAT.FTM] ?? 0, t[YAHOO_STAT.FTA] ?? 0),
     volumeStatIds: [YAHOO_STAT.FTM, YAHOO_STAT.FTA] as const,
@@ -97,6 +99,36 @@ export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
   },
 
   // ── Counting stats (per game) ──────────────────────────────────────────
+  [YAHOO_STAT.FGA]: {
+    id: "FGA",
+    espnStatId: YAHOO_STAT.FGA,
+    lowerIsBetter: false,
+    compute: (t, gp) => safe(t[YAHOO_STAT.FGA] ?? 0, Math.max(gp, 1)),
+  },
+  [YAHOO_STAT.FGM]: {
+    id: "FGM",
+    espnStatId: YAHOO_STAT.FGM,
+    lowerIsBetter: false,
+    compute: (t, gp) => safe(t[YAHOO_STAT.FGM] ?? 0, Math.max(gp, 1)),
+  },
+  [YAHOO_STAT.FTA]: {
+    id: "FTA",
+    espnStatId: YAHOO_STAT.FTA,
+    lowerIsBetter: false,
+    compute: (t, gp) => safe(t[YAHOO_STAT.FTA] ?? 0, Math.max(gp, 1)),
+  },
+  [YAHOO_STAT.FTM]: {
+    id: "FTM",
+    espnStatId: YAHOO_STAT.FTM,
+    lowerIsBetter: false,
+    compute: (t, gp) => safe(t[YAHOO_STAT.FTM] ?? 0, Math.max(gp, 1)),
+  },
+  [YAHOO_STAT.TPA]: {
+    id: "3PA",
+    espnStatId: YAHOO_STAT.TPA,
+    lowerIsBetter: false,
+    compute: (t, gp) => safe(t[YAHOO_STAT.TPA] ?? 0, Math.max(gp, 1)),
+  },
   [YAHOO_STAT.TPM]: {
     id: "3PM",
     espnStatId: YAHOO_STAT.TPM,
@@ -163,6 +195,12 @@ export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
     lowerIsBetter: false,
     compute: (t, gp) => safe(t[YAHOO_STAT.TD] ?? 0, Math.max(gp, 1)),
   },
+  [YAHOO_STAT.MIN]: {
+    id: "MIN",
+    espnStatId: YAHOO_STAT.MIN,
+    lowerIsBetter: false,
+    compute: (t, gp) => safe(t[YAHOO_STAT.MIN] ?? 0, Math.max(gp, 1)),
+  },
   [YAHOO_STAT.GP]: {
     id: "GP",
     espnStatId: YAHOO_STAT.GP,
@@ -175,15 +213,15 @@ export const YAHOO_NBA_STAT_MAP: Record<number, ScoringCat> = {
 export const YAHOO_NBA_DEFAULT_SCORING_CONFIG: LeagueScoringConfig = {
   format: "categories",
   cats: [
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.FGM]!,  // FG%
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.FTM]!,  // FT%
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.TPM]!,  // 3PM
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.PTS]!,  // PTS
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.REB]!,  // REB
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.AST]!,  // AST
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.STL]!,  // STL
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.BLK]!,  // BLK
-    YAHOO_NBA_STAT_MAP[YAHOO_STAT.TO]!,   // TO
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.FG_PCT]!,  // FG%
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.FT_PCT]!,  // FT%
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.TPM]!,     // 3PM
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.PTS]!,     // PTS
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.REB]!,     // REB
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.AST]!,     // AST
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.STL]!,     // STL
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.BLK]!,     // BLK
+    YAHOO_NBA_STAT_MAP[YAHOO_STAT.TO]!,      // TO
   ],
 };
 
@@ -193,19 +231,24 @@ export const YAHOO_NBA_DEFAULT_SCORING_CONFIG: LeagueScoringConfig = {
  */
 const YAHOO_NAME_TO_STAT_ID: Record<string, number> = {
   // Percentage stats
-  "FG%":  YAHOO_STAT.FGM,
-  "FGP":  YAHOO_STAT.FGM,
-  "FG":   YAHOO_STAT.FGM,
-  "FT%":  YAHOO_STAT.FTM,
-  "FTP":  YAHOO_STAT.FTM,
-  "FT":   YAHOO_STAT.FTM,
+  "FG%":  YAHOO_STAT.FG_PCT,
+  "FGP":  YAHOO_STAT.FG_PCT,
+  "FT%":  YAHOO_STAT.FT_PCT,
+  "FTP":  YAHOO_STAT.FT_PCT,
   "3P%":  YAHOO_STAT.TP_PCT,
   "3PP":  YAHOO_STAT.TP_PCT,
-  // Counting stats
+  // Shooting volume
+  "FGM":  YAHOO_STAT.FGM,
+  "FGA":  YAHOO_STAT.FGA,
+  "FTM":  YAHOO_STAT.FTM,
+  "FTA":  YAHOO_STAT.FTA,
+  // 3-point
   "3PTM": YAHOO_STAT.TPM,
   "3PM":  YAHOO_STAT.TPM,
   "3PT":  YAHOO_STAT.TPM,
-  "3PTA": YAHOO_STAT.TPM, // some leagues label 3PM as 3PTA
+  "3PTA": YAHOO_STAT.TPM,
+  "3PA":  YAHOO_STAT.TPA,
+  // Standard counting
   "PTS":  YAHOO_STAT.PTS,
   "REB":  YAHOO_STAT.REB,
   "OREB": YAHOO_STAT.OREB,
@@ -219,37 +262,12 @@ const YAHOO_NAME_TO_STAT_ID: Record<string, number> = {
   "DD":   YAHOO_STAT.DD,
   "TD":   YAHOO_STAT.TD,
   "GP":   YAHOO_STAT.GP,
+  "MIN":  YAHOO_STAT.MIN,
+  "MINUTES": YAHOO_STAT.MIN,
 };
 
 /**
  * Parse Yahoo league scoring settings into a LeagueScoringConfig.
- *
- * Yahoo league data structure (relevant part):
- * ```json
- * {
- *   "fantasy_content": {
- *     "league": [
- *       { "league_key": "428.l.19877", ... },
- *       {
- *         "settings": {
- *           "stat_categories": {
- *             "stats": [
- *               { "stat": { "stat_id": 12, "display_name": "PTS", "enabled": "1", ... } },
- *               ...
- *             ]
- *           },
- *           "stat_modifiers": {  // points leagues only
- *             "stats": [
- *               { "stat": { "stat_id": 12, "value": "1" } },
- *               ...
- *             ]
- *           }
- *         }
- *       }
- *     ]
- *   }
- * }
- * ```
  */
 export function parseYahooLeagueScoringConfig(yahooSettings: unknown): LeagueScoringConfig {
   try {
@@ -265,7 +283,6 @@ export function parseYahooLeagueScoringConfig(yahooSettings: unknown): LeagueSco
     const isPoints = Array.isArray(statMods) && statMods.length > 0;
 
     if (isPoints) {
-      // Points league: build pointValues map from stat_modifiers
       const pointValues: Record<number, number> = {};
       for (const mod of statMods) {
         const s = (mod as Record<string, unknown>).stat as Record<string, unknown> | undefined;

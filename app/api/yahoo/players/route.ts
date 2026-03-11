@@ -113,7 +113,8 @@ function extractLeaguePlayers(data: unknown): Array<{ key: string; name: string;
 
 /**
  * Parse stats from /players;player_keys={keys};out=stats response.
- * Response: fantasy_content.players.{n}.player[0] = metadata, player[1] = stats
+ * Response: fantasy_content.players.{n}.player[0] = metadata array,
+ *           player[1] = { player_stats: { stats: [{ stat: { stat_id, value } }, ...] } }
  */
 function parseStatsResponse(data: unknown): Map<string, { rawStats: Record<number, number>; gp: number }> {
   const result = new Map<string, { rawStats: Record<number, number>; gp: number }>();
@@ -128,7 +129,7 @@ function parseStatsResponse(data: unknown): Map<string, { rawStats: Record<numbe
       const pArr = pEntry?.player as unknown[];
       if (!Array.isArray(pArr) || pArr.length < 2) continue;
 
-      // Get player_key from metadata
+      // Get player_key from metadata (pArr[0] is the metadata array)
       const metaArr = pArr[0] as unknown[];
       let playerKey = "";
       if (Array.isArray(metaArr)) {
@@ -139,28 +140,24 @@ function parseStatsResponse(data: unknown): Map<string, { rawStats: Record<numbe
       }
       if (!playerKey) continue;
 
-      // Parse stats from player[1]
+      // Parse stats from player[1] — it's a plain object, not an array
       const statsData   = pArr[1] as Record<string, unknown> | undefined;
       const playerStats = statsData?.player_stats as Record<string, unknown> | undefined;
-      const statsArr    = (playerStats?.stats as Record<string, unknown>)?.stat as unknown[];
+      // stats is an array: [{ stat: { stat_id: "0", value: "61" } }, ...]
+      const statsArr    = playerStats?.stats as unknown[];
 
       const rawStats: Record<number, number> = {};
       let gp = 0;
 
       if (Array.isArray(statsArr)) {
         for (const statEntry of statsArr) {
-          const se  = statEntry as Record<string, unknown>;
-          const sid = Number(se.stat_id);
+          const statObj = (statEntry as Record<string, unknown>)?.stat as Record<string, unknown> | undefined;
+          if (!statObj) continue;
+          const sid = Number(statObj.stat_id);
           if (isNaN(sid)) continue;
-          const { value, attempted } = parseStatValue(se.value);
-          if (sid === YAHOO_STAT.GP) {
-            gp = value; rawStats[sid] = value;
-          } else if (attempted !== undefined) {
-            rawStats[sid]     = value;
-            rawStats[sid + 1] = attempted;
-          } else {
-            rawStats[sid] = value;
-          }
+          const { value } = parseStatValue(statObj.value);
+          rawStats[sid] = value;
+          if (sid === YAHOO_STAT.GP) gp = value;
         }
       }
       if (gp === 0 && rawStats[YAHOO_STAT.GP]) gp = rawStats[YAHOO_STAT.GP];

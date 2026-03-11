@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { clearCache } from "@/lib/espn-cache";
+import { clearCache, clearYahooCache } from "@/lib/espn-cache";
 import { useLeague } from "@/hooks/useLeague";
 import { useYahooLeague } from "@/hooks/useYahooLeague";
 import { scoringConfigLabel } from "@/lib/scoring-config";
@@ -295,9 +295,14 @@ export default function SettingsPage() {
       }
 
       // Yahoo credentials from QR transfer
+      const qrYahooAccessToken = params.get("yahoo_access_token") ?? "";
       const qrYahooB = params.get("yahoo_b") ?? "";
       const qrYahooT = params.get("yahoo_t") ?? "";
       const qrYahooKey = params.get("yahoo_league_key_nba") ?? "";
+      if (qrYahooAccessToken) {
+        localStorage.setItem("yahoo_access_token", qrYahooAccessToken);
+        setYahooAccessToken(qrYahooAccessToken);
+      }
       if (qrYahooB) {
         localStorage.setItem("yahoo_b", qrYahooB);
         if (qrYahooT) localStorage.setItem("yahoo_t", qrYahooT);
@@ -369,7 +374,7 @@ export default function SettingsPage() {
       `var s2=c['espn_s2']||'';` +
       `var sw=c['SWID']||'';` +
       `var href=location.href;` +
-      `var m=href.match(/[?&]leagueId=(\\d+)/);` +
+      `var m=href.match(/[?&#]leagueId=(\\d+)/)||href.match(/\\/league\\/(\\d+)/);` +
       `var lid=m?m[1]:'';` +
       `var sp='fba';` +
       `if(href.indexOf('/womens-basketball/')>-1)sp='wnba';` +
@@ -517,9 +522,21 @@ export default function SettingsPage() {
     localStorage.setItem("yahoo_league_key_nba", yahooLeagueKey);
     if (yahooB) localStorage.setItem("yahoo_b", yahooB);
     if (yahooT) localStorage.setItem("yahoo_t", yahooT);
+    const leagueName = yahooLeague.name ?? "";
     setYahooLeagues(prev => {
-      if (prev.find(l => l.key === yahooLeagueKey)) return prev;
-      const updated = [...prev, { key: yahooLeagueKey }];
+      const idx = prev.findIndex(l => l.key === yahooLeagueKey);
+      if (idx >= 0) {
+        // Already exists — update teamName if now available and not yet set
+        if (!leagueName || prev[idx].teamName) return prev;
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], teamName: leagueName };
+        persistYahooLeagues(updated);
+        return updated;
+      }
+      // New league — add it with name if available
+      const entry: YahooSavedLeague = { key: yahooLeagueKey };
+      if (leagueName) entry.teamName = leagueName;
+      const updated = [...prev, entry];
       persistYahooLeagues(updated);
       return updated;
     });
@@ -578,6 +595,7 @@ export default function SettingsPage() {
       persistYahooLeagues(updated);
       return updated;
     });
+    clearYahooCache(key);
     setYahooSaved(true);
     setTimeout(() => setYahooSaved(false), 2500);
     window.dispatchEvent(new Event("fantasy-settings-changed"));
@@ -640,6 +658,7 @@ export default function SettingsPage() {
   }
 
   function activateYahooLeague(key: string) {
+    clearYahooCache(key);
     setYahooLeagueKey(key);
     localStorage.setItem("yahoo_league_key_nba", key);
     window.dispatchEvent(new Event("fantasy-settings-changed"));
@@ -692,7 +711,8 @@ export default function SettingsPage() {
       url += `&lmeta_${s}=${encodeURIComponent(JSON.stringify(meta))}`;
     }
 
-    // Include Yahoo credentials if connected
+    // Include Yahoo credentials if connected (OAuth token takes priority over B cookie)
+    if (yahooAccessToken) url += `&yahoo_access_token=${encodeURIComponent(yahooAccessToken)}`;
     if (yahooB) url += `&yahoo_b=${encodeURIComponent(yahooB)}`;
     if (yahooT) url += `&yahoo_t=${encodeURIComponent(yahooT)}`;
     if (yahooLeagueKey) url += `&yahoo_league_key_nba=${encodeURIComponent(yahooLeagueKey)}`;
@@ -1175,7 +1195,7 @@ export default function SettingsPage() {
       )}
 
       {/* ── Transfer to Phone ──────────────────────────────── */}
-      {(leagueId && espnS2 && swid) || (yahooLeagueKey && yahooB) ? (
+      {(leagueId && espnS2 && swid) || (yahooLeagueKey && (yahooB || yahooAccessToken)) ? (
         <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 mt-4">
           <h2 className="text-base font-semibold text-white mb-1">Transfer to Phone</h2>
           <p className="text-xs text-gray-500 mb-5">
