@@ -791,7 +791,10 @@ export default function SettingsPage() {
               <p className="text-gray-600 text-xs">Auth errors? Click &quot;Reconnect Yahoo&quot; to sign in again.</p>
               <div className="flex items-center gap-3 ml-2 shrink-0">
                 <button
-                  onClick={() => reloadYahooLeague()}
+                  onClick={() => {
+                    reloadYahooLeague();
+                    window.dispatchEvent(new Event("fantasy-settings-changed"));
+                  }}
                   title="Re-fetch league settings from Yahoo (use after changing your league's scoring settings)"
                   className="text-xs text-blue-400/70 hover:text-blue-300 transition-colors"
                 >

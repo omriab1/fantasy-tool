@@ -10,7 +10,7 @@
  * Cache key prefix: "yahoo_" to isolate from ESPN cache entries.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cacheGet, cacheSet, clearYahooCache } from "@/lib/espn-cache";
 import { parseYahooLeagueScoringConfig, YAHOO_NBA_DEFAULT_SCORING_CONFIG } from "@/lib/yahoo-scoring-config";
 import { getValidYahooToken } from "@/lib/yahoo-auth";
@@ -176,41 +176,56 @@ export function useYahooLeague(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  // Keep stable refs to avoid stale closures in the effect
+  const bRef  = useRef(b);
+  const tRef  = useRef(_t);
+  bRef.current = b;
+  tRef.current = _t;
 
-  const load = useCallback(async () => {
-    const rawToken = localStorage.getItem("yahoo_access_token") ?? "";
-    if (!leagueKey || (!b && !rawToken)) {
-      setScoringConfig(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
-      setLeague(null);
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
 
-    const leagueCacheKey   = yahooCacheKey("league",   leagueKey, "v1");
-    const settingsCacheKey = yahooCacheKey("settings", leagueKey, "v1");
+    async function run() {
+      const rawToken = localStorage.getItem("yahoo_access_token") ?? "";
+      if (!leagueKey || (!bRef.current && !rawToken)) {
+        setScoringConfig(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
+        setLeague(null);
+        return;
+      }
 
-    const cachedLeague   = cacheGet<LeagueInfo>(leagueCacheKey);
-    const cachedSettings = cacheGet<unknown>(settingsCacheKey);
+      const leagueCacheKey   = yahooCacheKey("league",   leagueKey, "v1");
+      const settingsCacheKey = yahooCacheKey("settings", leagueKey, "v1");
 
-    if (cachedLeague && cachedSettings) {
-      setLeague(cachedLeague);
-      setScoringConfig(parseYahooLeagueScoringConfig(cachedSettings));
-      return;
-    }
+      const cachedLeague   = cacheGet<LeagueInfo>(leagueCacheKey);
+      const cachedSettings = cacheGet<unknown>(settingsCacheKey);
 
-    setScoringConfig(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
-    setLoading(true);
-    setError(null);
+      if (cachedLeague && cachedSettings) {
+        if (!cancelled) {
+          setLeague(cachedLeague);
+          setScoringConfig(parseYahooLeagueScoringConfig(cachedSettings));
+        }
+        return;
+      }
 
-    // Auto-refresh token if expired
-    const accessToken = rawToken ? await getValidYahooToken() : "";
-    const authHeaders: Record<string, string> = accessToken
-      ? { "x-yahoo-access-token": accessToken }
-      : { "x-yahoo-b": b, "x-yahoo-t": _t };
+      if (!cancelled) {
+        setScoringConfig(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
+        setLoading(true);
+        setError(null);
+      }
 
-    fetch(`/api/yahoo/league?leagueKey=${encodeURIComponent(leagueKey)}`, {
-      headers: authHeaders,
-    })
-      .then(async (res) => {
+      try {
+        const accessToken = rawToken ? await getValidYahooToken() : "";
+        if (cancelled) return;
+
+        const authHeaders: Record<string, string> = accessToken
+          ? { "x-yahoo-access-token": accessToken }
+          : { "x-yahoo-b": bRef.current, "x-yahoo-t": tRef.current };
+
+        const res = await fetch(`/api/yahoo/league?leagueKey=${encodeURIComponent(leagueKey)}`, {
+          headers: authHeaders,
+        });
+        if (cancelled) return;
+
         if (!res.ok) {
           const body = await res.json().catch(() => ({})) as Record<string, unknown>;
           const msg = (body.error as string) ?? `HTTP ${res.status}`;
@@ -222,9 +237,10 @@ export function useYahooLeague(
           }
           throw new Error(msg);
         }
-        return res.json();
-      })
-      .then((data: Record<string, unknown>) => {
+
+        const data = await res.json() as Record<string, unknown>;
+        if (cancelled) return;
+
         const info     = parseYahooLeagueData(data);
         const settings = extractYahooSettings(data);
         const config   = parseYahooLeagueScoringConfig(settings);
@@ -234,12 +250,16 @@ export function useYahooLeague(
 
         setLeague(info);
         setScoringConfig(config);
-      })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [leagueKey, b, _t, version]); // eslint-disable-line react-hooks/exhaustive-deps
+      } catch (err) {
+        if (!cancelled) setError((err as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
 
-  useEffect(() => { load(); }, [load]);
+    run();
+    return () => { cancelled = true; };
+  }, [leagueKey, version]); // b/_t read via refs so they don't retrigger on every keystroke
 
   /** Clear cache and force re-fetch (use when league settings changed on Yahoo) */
   const reload = useCallback(() => {
