@@ -117,6 +117,8 @@ export default function SettingsPage() {
   const [yahooClickedBookmark, setYahooClickedBookmark] = useState(false);
   const [yahooAutoResult, setYahooAutoResult] = useState<{ b: boolean; leagueKey: boolean } | null>(null);
   const [yahooOAuthError, setYahooOAuthError] = useState<string | null>(null);
+  const [yahooDebugData, setYahooDebugData] = useState<string | null>(null);
+  const [yahooDebugLoading, setYahooDebugLoading] = useState(false);
   const [yahooSavedConnectedInfo, setYahooSavedConnectedInfo] = useState<ConnectedInfo | null>(null);
   const [yahooLeagues, setYahooLeagues] = useState<YahooSavedLeague[]>([]);
   const [yahooEditingKey, setYahooEditingKey] = useState<string | null>(null);
@@ -602,6 +604,14 @@ export default function SettingsPage() {
   }
 
   function disconnectYahoo() {
+    // Clear Yahoo API cache so reconnect always fetches fresh data
+    if (yahooLeagueKey) clearYahooCache(yahooLeagueKey);
+    // Also clear any yahoo_cache_* entries that might remain
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith("yahoo_cache_"))
+        .forEach(k => localStorage.removeItem(k));
+    } catch { /* ignore */ }
     localStorage.removeItem("yahoo_access_token");
     localStorage.removeItem("yahoo_refresh_token");
     localStorage.removeItem("yahoo_token_expires");
@@ -694,6 +704,28 @@ export default function SettingsPage() {
       return updated;
     });
     setYahooEditingKey(null);
+  }
+
+  async function fetchYahooDebug() {
+    if (!yahooLeagueKey || (!yahooB && !yahooAccessToken)) return;
+    setYahooDebugLoading(true);
+    setYahooDebugData(null);
+    try {
+      const token = yahooAccessToken || localStorage.getItem("yahoo_access_token") || "";
+      const authHeaders: Record<string, string> = token
+        ? { "x-yahoo-access-token": token }
+        : { "x-yahoo-b": yahooB, "x-yahoo-t": yahooT };
+      const res = await fetch(
+        `/api/yahoo/debug?leagueKey=${encodeURIComponent(yahooLeagueKey)}`,
+        { headers: authHeaders }
+      );
+      const data = await res.json();
+      setYahooDebugData(JSON.stringify(data, null, 2));
+    } catch (e) {
+      setYahooDebugData(`Error: ${String(e)}`);
+    } finally {
+      setYahooDebugLoading(false);
+    }
   }
 
   // Build transfer URL — includes both ESPN and Yahoo credentials
@@ -1062,6 +1094,30 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
+            )}
+
+            {/* Debug section — shows raw Yahoo stat_categories to diagnose parser */}
+            {(yahooLeagueKey && (yahooB || yahooAccessToken)) && (
+              <details className="group">
+                <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-300 select-none flex items-center gap-1.5">
+                  <span className="inline-block transition-transform group-open:rotate-90">▶</span>
+                  Diagnose: show raw Yahoo scoring settings
+                </summary>
+                <div className="mt-3 flex flex-col gap-2">
+                  <button
+                    onClick={fetchYahooDebug}
+                    disabled={yahooDebugLoading}
+                    className="text-xs bg-white/5 hover:bg-white/10 text-gray-300 px-3 py-1.5 rounded transition-colors w-fit disabled:opacity-40"
+                  >
+                    {yahooDebugLoading ? "Fetching…" : "Fetch raw stat_categories from Yahoo"}
+                  </button>
+                  {yahooDebugData && (
+                    <pre className="text-[10px] text-gray-400 bg-black/30 rounded p-3 overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                      {yahooDebugData}
+                    </pre>
+                  )}
+                </div>
+              </details>
             )}
 
             {/* Manual / Advanced — collapsible */}
