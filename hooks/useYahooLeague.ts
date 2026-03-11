@@ -10,9 +10,10 @@
  * Cache key prefix: "yahoo_" to isolate from ESPN cache entries.
  */
 
-import { useState, useEffect } from "react";
-import { cacheGet, cacheSet } from "@/lib/espn-cache";
+import { useState, useEffect, useCallback } from "react";
+import { cacheGet, cacheSet, clearYahooCache } from "@/lib/espn-cache";
 import { parseYahooLeagueScoringConfig, YAHOO_NBA_DEFAULT_SCORING_CONFIG } from "@/lib/yahoo-scoring-config";
+import { getValidYahooToken } from "@/lib/yahoo-auth";
 import type { LeagueInfo, LeagueTeam, LeagueScoringConfig } from "@/lib/types";
 
 /** Yahoo-specific cache key (avoids espn_cache_ prefix from espn-cache.ts) */
@@ -174,16 +175,17 @@ export function useYahooLeague(
   const [scoringConfig, setScoringConfig] = useState<LeagueScoringConfig>(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
 
-  useEffect(() => {
-    const accessToken = localStorage.getItem("yahoo_access_token") ?? "";
-    if (!leagueKey || (!b && !accessToken)) {
+  const load = useCallback(async () => {
+    const rawToken = localStorage.getItem("yahoo_access_token") ?? "";
+    if (!leagueKey || (!b && !rawToken)) {
       setScoringConfig(YAHOO_NBA_DEFAULT_SCORING_CONFIG);
       setLeague(null);
       return;
     }
 
-    const leagueCacheKey  = yahooCacheKey("league",   leagueKey, "v1");
+    const leagueCacheKey   = yahooCacheKey("league",   leagueKey, "v1");
     const settingsCacheKey = yahooCacheKey("settings", leagueKey, "v1");
 
     const cachedLeague   = cacheGet<LeagueInfo>(leagueCacheKey);
@@ -199,6 +201,8 @@ export function useYahooLeague(
     setLoading(true);
     setError(null);
 
+    // Auto-refresh token if expired
+    const accessToken = rawToken ? await getValidYahooToken() : "";
     const authHeaders: Record<string, string> = accessToken
       ? { "x-yahoo-access-token": accessToken }
       : { "x-yahoo-b": b, "x-yahoo-t": _t };
@@ -233,7 +237,15 @@ export function useYahooLeague(
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [leagueKey, b, _t]);
+  }, [leagueKey, b, _t, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { league, scoringConfig, loading, error };
+  useEffect(() => { load(); }, [load]);
+
+  /** Clear cache and force re-fetch (use when league settings changed on Yahoo) */
+  const reload = useCallback(() => {
+    if (leagueKey) clearYahooCache(leagueKey);
+    setVersion(v => v + 1);
+  }, [leagueKey]);
+
+  return { league, scoringConfig, loading, error, reload };
 }

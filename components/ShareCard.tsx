@@ -360,7 +360,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
                   }}
                 >
                   <span style={{ fontSize: sc(10), color: "#4b5563" }}>
-                    * Made/attempted shown per game as displayed on ESPN · % uses full volume accuracy
+                    * Made/attempted shown per game · % uses full volume accuracy
                   </span>
                 </div>
               )}

@@ -19,6 +19,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { cacheGet, cacheSet } from "@/lib/espn-cache";
 import { YAHOO_SPORT_CONFIGS } from "@/lib/yahoo-config";
+import { getValidYahooToken } from "@/lib/yahoo-auth";
 import type { PlayerStats } from "@/lib/types";
 
 export type YahooWindow = "season" | "30" | "14" | "7" | "proj";
@@ -39,7 +40,7 @@ export function useYahooPlayers(
 
   const cfg = YAHOO_SPORT_CONFIGS.nba;
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     const accessToken = localStorage.getItem("yahoo_access_token") ?? "";
     if (!leagueKey || (!b && !accessToken)) return;
 
@@ -53,8 +54,10 @@ export function useYahooPlayers(
     setLoading(true);
     setError(null);
 
-    const authHeaders: Record<string, string> = accessToken
-      ? { "x-yahoo-access-token": accessToken }
+    // Auto-refresh token if expired
+    const validToken = accessToken ? await getValidYahooToken() : "";
+    const authHeaders: Record<string, string> = validToken
+      ? { "x-yahoo-access-token": validToken }
       : { "x-yahoo-b": b, "x-yahoo-t": t };
 
     fetch(

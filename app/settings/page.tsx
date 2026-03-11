@@ -449,7 +449,7 @@ export default function SettingsPage() {
   const sportCfg = SPORT_CONFIGS[sport];
 
   // ── Yahoo league hook ──────────────────────────────────────────────────────
-  const { league: yahooLeague, scoringConfig: yahooScoringConfig } = useYahooLeague(
+  const { league: yahooLeague, scoringConfig: yahooScoringConfig, reload: reloadYahooLeague } = useYahooLeague(
     yahooLeagueKey, yahooB, yahooT
   );
 
@@ -789,7 +789,16 @@ export default function SettingsPage() {
             <p className="font-mono text-gray-400 pl-7">{info.label}</p>
             <div className="flex items-center justify-between pl-7 pt-1">
               <p className="text-gray-600 text-xs">Auth errors? Click &quot;Reconnect Yahoo&quot; to sign in again.</p>
-              <button onClick={disconnectYahoo} className="text-xs text-red-400/70 hover:text-red-400 transition-colors ml-2 shrink-0">Disconnect</button>
+              <div className="flex items-center gap-3 ml-2 shrink-0">
+                <button
+                  onClick={() => reloadYahooLeague()}
+                  title="Re-fetch league settings from Yahoo (use after changing your league's scoring settings)"
+                  className="text-xs text-blue-400/70 hover:text-blue-300 transition-colors"
+                >
+                  ↻ Sync Settings
+                </button>
+                <button onClick={disconnectYahoo} className="text-xs text-red-400/70 hover:text-red-400 transition-colors">Disconnect</button>
+              </div>
             </div>
           </div>
         );
