@@ -49,32 +49,17 @@ export default function HomePage() {
 
       {/* Option cards — 2-col mobile, 3-col desktop */}
       <div className="w-full max-w-2xl grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {OPTIONS.map((opt) => {
-          if (opt.soon) {
-            return (
-              <div
-                key={opt.href}
-                className="relative flex flex-col items-center text-center bg-[#1a1f2e] border border-white/5 rounded-xl px-3 py-4 opacity-50 cursor-not-allowed select-none"
-              >
-                <span className="absolute -top-2 right-3 text-[9px] bg-[#1a1f2e] border border-amber-500/40 px-1.5 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
-                <span className="text-3xl mb-2">{opt.emoji}</span>
-                <p className="text-white font-semibold text-sm">{opt.title}</p>
-                <p className="text-gray-500 text-xs mt-1 leading-snug">{opt.description}</p>
-              </div>
-            );
-          }
-          return (
-            <Link
-              key={opt.href}
-              href={opt.href}
-              className="flex flex-col items-center text-center bg-[#1a1f2e] border border-white/10 rounded-xl px-3 py-4 hover:border-white/25 hover:bg-[#1f2540] transition-colors"
-            >
-              <span className="text-3xl mb-2">{opt.emoji}</span>
-              <p className="text-white font-semibold text-sm">{opt.title}</p>
-              <p className="text-gray-500 text-xs mt-1 leading-snug">{opt.description}</p>
-            </Link>
-          );
-        })}
+        {OPTIONS.map((opt) => (
+          <Link
+            key={opt.href}
+            href={opt.href}
+            className="flex flex-col items-center text-center bg-[#1a1f2e] border border-white/10 rounded-xl px-3 py-4 hover:border-white/25 hover:bg-[#1f2540] transition-colors"
+          >
+            <span className="text-3xl mb-2">{opt.emoji}</span>
+            <p className="text-white font-semibold text-sm">{opt.title}</p>
+            <p className="text-gray-500 text-xs mt-1 leading-snug">{opt.description}</p>
+          </Link>
+        ))}
       </div>
     </div>
   );
