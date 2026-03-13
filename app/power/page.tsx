@@ -1,14 +1,14 @@
 "use client";
 
 import { Fragment, useState, useEffect, useCallback, useRef } from "react";
-import { useLeague } from "@/hooks/useLeague";
-import { usePlayers } from "@/hooks/usePlayers";
+import { useFantasyLeague } from "@/hooks/useFantasyLeague";
+import { useFantasyPlayers } from "@/hooks/useFantasyPlayers";
 import { calcTradeScore } from "@/lib/trade-score";
 import { fmt, aggregateStats } from "@/lib/stat-calculator";
 import { scoringConfigLabel } from "@/lib/scoring-config";
 import { cacheGet, cacheSet, cacheKey } from "@/lib/espn-cache";
 import { SPORT_CONFIGS, getStatsWindowNote } from "@/lib/sports-config";
-import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig, EspnSport, StatsWindow } from "@/lib/types";
+import type { AggregatedStats, PowerMatchup, PowerRankEntry, LeagueScoringConfig, EspnSport, StatsWindow, FantasyProvider } from "@/lib/types";
 import { WeekRangePicker } from "@/components/WeekRangePicker";
 import { StatsWindowTabs } from "@/components/StatsWindowTabs";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -241,6 +241,11 @@ export default function PowerPage() {
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
   const [sport, setSport] = useState<EspnSport>("fba");
+  const [provider, setProvider] = useState<FantasyProvider>("espn");
+  const [yahooLeagueKey, setYahooLeagueKey] = useState("");
+  const [yahooB, setYahooB] = useState("");
+  const [yahooT, setYahooT] = useState("");
+  const [yahooAccessToken, setYahooAccessToken] = useState("");
 
   // Mode
   const [mode, setMode] = useState<AnalysisMode>("weeks");
@@ -275,6 +280,8 @@ export default function PowerPage() {
 
   useEffect(() => {
     function readSettings() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setProvider(p);
       const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
       const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
       setSport(validSport);
@@ -282,16 +289,28 @@ export default function PowerPage() {
       setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
+      setYahooB(localStorage.getItem("yahoo_b") ?? "");
+      setYahooT(localStorage.getItem("yahoo_t") ?? "");
+      setYahooAccessToken(localStorage.getItem("yahoo_access_token") ?? "");
     }
     readSettings();
-    window.addEventListener("espn-settings-changed", readSettings);
-    return () => window.removeEventListener("espn-settings-changed", readSettings);
+    window.addEventListener("fantasy-settings-changed", readSettings);
+    return () => window.removeEventListener("fantasy-settings-changed", readSettings);
   }, []);
 
   const sportConfig = SPORT_CONFIGS[sport];
 
-  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useLeague(leagueId, espnS2, swid, sport);
-  const { players, loading: playersLoading } = usePlayers(leagueId, espnS2, swid, statsWindow, sport, league?.activeLineupSlotIds);
+  const { league, scoringConfig, loading: leagueLoading, error: leagueError } = useFantasyLeague({
+    provider,
+    espn: { leagueId, espnS2, swid, sport },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT },
+  });
+  const { players, loading: playersLoading } = useFantasyPlayers({
+    provider,
+    espn: { leagueId, espnS2, swid, window: statsWindow, sport, activeSlotIds: league?.activeLineupSlotIds },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT, window: statsWindow },
+  });
 
   useEffect(() => {
     if (!league) return;
@@ -449,7 +468,9 @@ export default function PowerPage() {
     }
   }
 
-  const noSettings = !leagueId || !espnS2 || !swid;
+  const noSettings = provider === "yahoo"
+    ? !yahooLeagueKey || (!yahooB && !yahooAccessToken)
+    : !leagueId || !espnS2 || !swid;
   const numWeeks = endPeriod - startPeriod + 1;
   const rosterReady = players.length > 0 && !playersLoading;
 
@@ -543,7 +564,7 @@ export default function PowerPage() {
                   <StatsWindowTabs
                     value={statsWindow}
                     onChange={setStatsWindow}
-                    availableWindows={sportConfig.availableWindows}
+                    availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                     note={getStatsWindowNote(sportConfig, statsWindow)}
                   />
                 </div>
@@ -617,7 +638,7 @@ export default function PowerPage() {
                       <StatsWindowTabs
                         value={statsWindow}
                         onChange={setStatsWindow}
-                        availableWindows={sportConfig.availableWindows}
+                        availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                         note={getStatsWindowNote(sportConfig, statsWindow)}
                       />
                     </div>

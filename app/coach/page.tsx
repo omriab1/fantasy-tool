@@ -1,9 +1,10 @@
 "use client";
 
+import { redirect } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { useLeague } from "@/hooks/useLeague";
+import { useFantasyLeague } from "@/hooks/useFantasyLeague";
 import { usePlayers } from "@/hooks/usePlayers";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { swidMatchesOwner } from "@/lib/swid-parser";
@@ -11,25 +12,96 @@ import {
   buildSystemPrompt,
   buildWeeklyPrompt,
   buildDailyPrompt,
-  buildTradePrompt,
   rankFreeAgents,
 } from "@/lib/coach-prompts";
 import { SPORT_CONFIGS } from "@/lib/sports-config";
-import { ErrorBanner } from "@/components/ErrorBanner";
 import type {
+  AggregatedStats,
   CoachAdvice,
   CoachResponse,
   EspnSport,
+  FantasyProvider,
   LeagueInfo,
   LeagueScoringConfig,
   PlayerStats,
 } from "@/lib/types";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Returns today's date string in NY timezone (YYYY-MM-DD). */
+function getNYDateStr(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
+
+/**
+ * Returns the local-time equivalent of 1:00 AM NY time.
+ * Each user sees the time in their own timezone.
+ */
+function getDailyUpdateTime(): string {
+  try {
+    const now = new Date();
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(now);
+    const [h, m] = fmt.split(":").map(Number);
+    let minUntil = 1 * 60 - (h % 24 * 60 + m);
+    if (minUntil <= 0) minUntil += 24 * 60;
+    const next = new Date(now.getTime() + minUntil * 60 * 1000);
+    return next.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "1:00 AM";
+  }
+}
+
+// ─── Schedule matchup type ────────────────────────────────────────────────────
+
+type ScheduleMatchup = {
+  matchupPeriodId: number;
+  home: { teamId: number; cumulativeScore?: { scoreByStat?: Record<string, { score: number }> } };
+  away?: { teamId: number; cumulativeScore?: { scoreByStat?: Record<string, { score: number }> } }; // undefined for bye weeks
+};
+
+/** Compute per-week average category stats for a team from the ESPN matchup schedule. */
+function computeMatchupAvgs(
+  schedule: ScheduleMatchup[],
+  teamId: number,
+  fromPeriod: number,
+  toPeriodExclusive: number,
+  config: LeagueScoringConfig
+): { avgs: AggregatedStats; weeks: number } {
+  const accum: Record<number, number> = {};
+  let weeks = 0;
+
+  for (const m of schedule) {
+    const pid = m.matchupPeriodId;
+    if (pid < fromPeriod || pid >= toPeriodExclusive) continue;
+
+    for (const side of [m.home, m.away]) {
+      if (!side || side.teamId !== teamId) continue;
+      const sbs = side.cumulativeScore?.scoreByStat;
+      if (!sbs) continue;
+      for (const [sidStr, entry] of Object.entries(sbs)) {
+        const sid = parseInt(sidStr, 10);
+        if (!isNaN(sid)) accum[sid] = (accum[sid] ?? 0) + entry.score;
+      }
+      weeks++;
+    }
+  }
+
+  if (weeks === 0) return { avgs: {}, weeks: 0 };
+
+  const avgs: AggregatedStats = {};
+  for (const cat of config.cats) {
+    avgs[cat.id] = cat.compute(accum, weeks);
+  }
+  return { avgs, weeks };
+}
+
 // ─── Cache helpers ─────────────────────────────────────────────────────────────
 
 function getWeeklyCache(leagueId: string, sport: string, periodId: number, type: "weekly" | "trade"): CoachAdvice | null {
   try {
-    const raw = localStorage.getItem(`ai_coach_${type}_${leagueId}_${sport}_${periodId}`);
+    const raw = localStorage.getItem(`ai_coach_${type}_v9_${leagueId}_${sport}_${periodId}`);
     if (!raw) return null;
     return JSON.parse(raw) as CoachAdvice;
   } catch { return null; }
@@ -37,8 +109,7 @@ function getWeeklyCache(leagueId: string, sport: string, periodId: number, type:
 
 function getDailyCache(leagueId: string, sport: string): CoachAdvice | null {
   try {
-    const today = new Date().toISOString().split("T")[0];
-    const raw = localStorage.getItem(`ai_coach_daily_${leagueId}_${sport}_${today}`);
+    const raw = localStorage.getItem(`ai_coach_daily_v10_${leagueId}_${sport}_${getNYDateStr()}`);
     if (!raw) return null;
     return JSON.parse(raw) as CoachAdvice;
   } catch { return null; }
@@ -68,7 +139,7 @@ function InsightsList({ insights }: { insights: string[] }) {
           <span className="w-5 h-5 rounded-full bg-[#e8193c]/20 text-[#e8193c] text-xs flex items-center justify-center font-bold shrink-0 mt-0.5">
             {i + 1}
           </span>
-          <div className="text-sm text-gray-200 leading-relaxed [&_strong]:text-white [&_strong]:font-semibold">
+          <div className="text-sm text-gray-200 leading-relaxed [&_strong]:text-white [&_strong]:font-semibold [&_em]:text-sky-400 [&_em]:not-italic [&_em]:font-medium">
             <ReactMarkdown>{text}</ReactMarkdown>
           </div>
         </li>
@@ -108,13 +179,12 @@ interface CoachCardProps {
   advice: CoachAdvice | null;
   loading: boolean;
   error: string | null;
-  onRefresh: () => void;
   showHeadshotRow?: boolean;
   cdnLeague?: string;
 }
 
 function CoachCard({
-  icon, title, description, updateCadence, opponentBadge, advice, loading, error, onRefresh,
+  icon, title, description, updateCadence, opponentBadge, advice, loading, error,
   showHeadshotRow, cdnLeague,
 }: CoachCardProps) {
   const lastUpdated = advice?.generatedAt
@@ -124,24 +194,15 @@ function CoachCard({
   return (
     <div className="bg-[#1a1f2e] border border-white/10 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between px-5 py-3.5 border-b border-white/8">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="text-base shrink-0 mt-0.5">{icon}</span>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-white">{title}</h2>
-            <p className="text-xs text-gray-500 mt-0.5 leading-snug">{description}</p>
-            <p className="text-xs text-gray-600 mt-1">
-              {lastUpdated ? `Updated ${lastUpdated}` : updateCadence}
-            </p>
-          </div>
+      <div className="flex items-start px-5 py-3.5 border-b border-white/8">
+        <span className="text-base shrink-0 mt-0.5 mr-2.5">{icon}</span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-white">{title}</h2>
+          <p className="text-xs text-gray-500 mt-0.5 leading-snug">{description}</p>
+          <p className="text-xs text-gray-600 mt-1">
+            {updateCadence}{lastUpdated ? ` · Updated ${lastUpdated}` : ""}
+          </p>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="shrink-0 ml-3 text-xs text-gray-500 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-colors mt-0.5"
-        >
-          {loading ? "…" : "Refresh"}
-        </button>
       </div>
 
       {/* Opponent badge */}
@@ -155,10 +216,9 @@ function CoachCard({
 
       {/* Body */}
       <div className="px-5 py-4">
-        {loading && <Spinner />}
-        {!loading && error && <ErrorBanner message={error} onRetry={onRefresh} />}
-        {!loading && !error && !advice && (
-          <p className="text-sm text-gray-600 text-center py-4">Fetching advice…</p>
+        {(loading || (!advice && !error)) && <Spinner />}
+        {!loading && error && (
+          <p className="text-xs text-red-400 text-center py-4">{error}</p>
         )}
         {!loading && !error && advice && (
           <>
@@ -176,39 +236,40 @@ function CoachCard({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CoachPage() {
+  redirect("/"); // AI Coach temporarily disabled — remove this line to re-enable
+
   // ESPN credentials
   const [leagueId, setLeagueId] = useState("");
   const [espnS2, setEspnS2]     = useState("");
   const [swid, setSwid]         = useState("");
   const [sport, setSport]       = useState<EspnSport>("fba");
+  const [provider, setProvider] = useState<FantasyProvider>("espn");
+  const [yahooLeagueKey, setYahooLeagueKey] = useState("");
+  const [yahooB, setYahooB]     = useState("");
+  const [yahooT, setYahooT]     = useState("");
 
   // Weekly advice
   const [weeklyAdvice, setWeeklyAdvice]   = useState<CoachAdvice | null>(null);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [weeklyError, setWeeklyError]     = useState<string | null>(null);
-  const weeklyBusy = useRef(false);
+  const weeklyBusy = useRef<boolean>(false);
 
   // Daily advice
   const [dailyAdvice, setDailyAdvice]   = useState<CoachAdvice | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyError, setDailyError]     = useState<string | null>(null);
-  const dailyBusy = useRef(false);
-
-  // Trade advice
-  const [tradeAdvice, setTradeAdvice]   = useState<CoachAdvice | null>(null);
-  const [tradeLoading, setTradeLoading] = useState(false);
-  const [tradeError, setTradeError]     = useState<string | null>(null);
-  const tradeBusy = useRef(false);
+  const dailyBusy = useRef<boolean>(false);
 
   // Track whether auto-fetch has already been triggered this mount
   const weeklyAutoFetched = useRef(false);
   const dailyAutoFetched  = useRef(false);
-  const tradeAutoFetched  = useRef(false);
 
   // ── Read settings from localStorage ──────────────────────────────────────
 
   useEffect(() => {
     function readSettings() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setProvider(p);
       const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
       const validSport = storedSport in SPORT_CONFIGS ? storedSport : "fba";
       setSport(validSport);
@@ -218,22 +279,42 @@ export default function CoachPage() {
       );
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
+      setYahooB(localStorage.getItem("yahoo_b") ?? "");
+      setYahooT(localStorage.getItem("yahoo_t") ?? "");
     }
     readSettings();
-    window.addEventListener("espn-settings-changed", readSettings);
-    return () => window.removeEventListener("espn-settings-changed", readSettings);
+    window.addEventListener("fantasy-settings-changed", readSettings);
+    return () => window.removeEventListener("fantasy-settings-changed", readSettings);
   }, []);
 
-  // ── ESPN data ─────────────────────────────────────────────────────────────
+  // ── League + player data (provider-aware) ─────────────────────────────────
 
-  const { league, scoringConfig, loading: leagueLoading } = useLeague(leagueId, espnS2, swid, sport);
+  const { league, scoringConfig, loading: leagueLoading } = useFantasyLeague({
+    provider,
+    espn: { leagueId, espnS2, swid, sport },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT },
+  });
   const { players, loading: playersLoading } = usePlayers(
     leagueId, espnS2, swid, "30", sport, league?.activeLineupSlotIds
   );
+  // Extra windows for weekly multi-perspective analysis — all share cached ESPN response
+  const { players: playersSeason } = usePlayers(leagueId, espnS2, swid, "season", sport, league?.activeLineupSlotIds);
+  const { players: players15d }    = usePlayers(leagueId, espnS2, swid, "15",     sport, league?.activeLineupSlotIds);
+  const { players: players7d }     = usePlayers(leagueId, espnS2, swid, "7",      sport, league?.activeLineupSlotIds);
+  const { players: playersProj }   = usePlayers(leagueId, espnS2, swid, "proj",   sport, league?.activeLineupSlotIds);
 
   const sportCfg = SPORT_CONFIGS[sport];
   const cdnLeague = sportCfg?.cdnLeague ?? "nba";
   const dataReady = !!league && players.length > 0 && !!leagueId;
+
+  // windowPlayersRef always holds the latest window player arrays.
+  // fetchDailyAdvice reads from here instead of closing over the arrays,
+  // so adding more windows never invalidates the callback and re-triggers the auto-fetch.
+  const windowPlayersRef = useRef<{ season: PlayerStats[]; p15d: PlayerStats[]; p7d: PlayerStats[] }>({ season: playersSeason, p15d: players15d, p7d: players7d });
+  useEffect(() => {
+    windowPlayersRef.current = { season: playersSeason, p15d: players15d, p7d: players7d };
+  }, [playersSeason, players15d, players7d]);
 
   // ── AI call helper ────────────────────────────────────────────────────────
 
@@ -275,25 +356,21 @@ export default function CoachPage() {
     if (!weeklyRes.ok) throw new Error("Could not load matchup schedule from ESPN.");
     const weeklyData = (await weeklyRes.json()) as { schedule?: unknown[] };
 
-    const schedule = (weeklyData.schedule ?? []) as Array<{
-      matchupPeriodId: number;
-      home: { teamId: number };
-      away: { teamId: number };
-    }>;
+    const schedule = (weeklyData.schedule ?? []) as ScheduleMatchup[];
 
     const matchup = schedule.find(
       (m) =>
         m.matchupPeriodId === currentPeriod &&
-        (m.home.teamId === myTeam.id || m.away.teamId === myTeam.id)
+        (m.home.teamId === myTeam.id || m.away?.teamId === myTeam.id)
     );
     if (!matchup) throw new Error("Could not find your current matchup in the schedule.");
 
     const opponentId =
-      matchup.home.teamId === myTeam.id ? matchup.away.teamId : matchup.home.teamId;
+      matchup.home.teamId === myTeam.id ? matchup.away?.teamId : matchup.home.teamId;
     const opponentTeam = currentLeague.teams.find((t) => t.id === opponentId);
     const opponentName = opponentTeam?.name ?? "Unknown Opponent";
 
-    // Aggregate roster stats
+    // Aggregate roster stats (30d)
     const myRoster = currentPlayers.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
     const opponentRoster = currentPlayers.filter(
       (p) => opponentTeam?.rosterPlayerIds.includes(p.playerId)
@@ -301,40 +378,84 @@ export default function CoachPage() {
     const myStats = aggregateStats(myRoster, currentScoringConfig);
     const opponentStats = aggregateStats(opponentRoster, currentScoringConfig);
 
-    return { myTeam, opponentTeam, opponentName, myStats, opponentStats, currentPeriod };
+    return { myTeam, opponentTeam, opponentName, myStats, opponentStats, currentPeriod, schedule };
   }
 
   // ── Fetch weekly advice ───────────────────────────────────────────────────
 
   const fetchWeeklyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (weeklyBusy.current || !league) return;
+    if (provider === "yahoo") {
+      setWeeklyError("AI Coach weekly analysis uses ESPN matchup data — switch to ESPN in the navbar.");
+      return;
+    }
     weeklyBusy.current = true;
     setWeeklyLoading(true);
     setWeeklyError(null);
 
     try {
-      const period = league.scoringPeriodId;
+      const period = league!.scoringPeriodId;
       if (!bypassCache) {
         const cached = getWeeklyCache(leagueId, sport, period, "weekly");
         if (cached) { setWeeklyAdvice(cached); return; }
       }
 
-      const { myTeam, opponentTeam, opponentName, myStats, opponentStats, currentPeriod } =
-        await fetchMatchupData(league, scoringConfig, players);
+      const { myTeam, opponentTeam, opponentName, myStats: myStats30, opponentStats: oppStats30, currentPeriod, schedule } =
+        await fetchMatchupData(league!, scoringConfig, players);
 
-      const myRosterPlayers = players.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
-      const oppRosterPlayers = players.filter((p) => opponentTeam?.rosterPlayerIds.includes(p.playerId));
+      // Season and 15d stats for additional perspectives
+      const myRosterSeason  = playersSeason.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
+      const oppRosterSeason = playersSeason.filter((p) => opponentTeam?.rosterPlayerIds.includes(p.playerId));
+      const myRoster15d     = players15d.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
+      const oppRoster15d    = players15d.filter((p) => opponentTeam?.rosterPlayerIds.includes(p.playerId));
+      const myStatsSeason  = aggregateStats(myRosterSeason,  scoringConfig);
+      const oppStatsSeason = aggregateStats(oppRosterSeason, scoringConfig);
+      const myStats15      = aggregateStats(myRoster15d,     scoringConfig);
+      const oppStats15     = aggregateStats(oppRoster15d,    scoringConfig);
+
+      // Full-season matchup averages (all completed weeks)
+      const { avgs: myMatchupAvgs, weeks: matchupWeeks } = computeMatchupAvgs(
+        schedule, myTeam.id, 1, currentPeriod, scoringConfig
+      );
+      const { avgs: oppMatchupAvgs } = computeMatchupAvgs(
+        schedule, opponentTeam?.id ?? -1, 1, currentPeriod, scoringConfig
+      );
+
+      // Recent 3-week matchup averages (last 3 completed matchup periods)
+      const recent3From = Math.max(1, currentPeriod - 3);
+      const { avgs: myMatchupAvgs3w, weeks: matchupWeeks3w } = computeMatchupAvgs(
+        schedule, myTeam.id, recent3From, currentPeriod, scoringConfig
+      );
+      const { avgs: oppMatchupAvgs3w } = computeMatchupAvgs(
+        schedule, opponentTeam?.id ?? -1, recent3From, currentPeriod, scoringConfig
+      );
+
+      // Projections — fallback for early season when matchup history is thin
+      const myRosterProj  = playersProj.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
+      const oppRosterProj = playersProj.filter((p) => opponentTeam?.rosterPlayerIds.includes(p.playerId));
+      const myStatsProj   = aggregateStats(myRosterProj,  scoringConfig);
+      const oppStatsProj  = aggregateStats(oppRosterProj, scoringConfig);
 
       const systemPrompt = buildSystemPrompt("weekly");
       const userPrompt = buildWeeklyPrompt({
         sportName: sportCfg.name,
         scoringConfig,
         myTeamName: myTeam.name,
-        myRoster: myRosterPlayers.map((p) => p.playerName),
-        myStats,
         opponentName,
-        opponentRoster: oppRosterPlayers.map((p) => p.playerName),
-        opponentStats,
+        myStats30,
+        oppStats30,
+        myStatsSeason,
+        oppStatsSeason,
+        myStats15,
+        oppStats15,
+        myMatchupAvgs,
+        oppMatchupAvgs,
+        matchupWeeks,
+        myMatchupAvgs3w,
+        oppMatchupAvgs3w,
+        matchupWeeks3w,
+        myStatsProj,
+        oppStatsProj,
       });
 
       const insights = await callAI("weekly", systemPrompt, userPrompt, signal);
@@ -345,7 +466,7 @@ export default function CoachPage() {
         matchupPeriodId: currentPeriod,
         opponentName,
       };
-      setCoachCache(`ai_coach_weekly_${leagueId}_${sport}_${currentPeriod}`, advice);
+      setCoachCache(`ai_coach_weekly_v9_${leagueId}_${sport}_${currentPeriod}`, advice);
       setWeeklyAdvice(advice);
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -355,12 +476,16 @@ export default function CoachPage() {
       weeklyBusy.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid]);
+  }, [league, players, playersSeason, players15d, playersProj, scoringConfig, leagueId, sport, espnS2, swid, provider]);
 
   // ── Fetch daily advice ────────────────────────────────────────────────────
 
   const fetchDailyAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
     if (dailyBusy.current || !league) return;
+    if (provider === "yahoo") {
+      setDailyError("AI Coach daily analysis uses ESPN schedule data — switch to ESPN in the navbar.");
+      return;
+    }
     dailyBusy.current = true;
     setDailyLoading(true);
     setDailyError(null);
@@ -382,31 +507,103 @@ export default function CoachPage() {
 
       const proTeamSchedules = (leagueWithSchedule?.proTeamSchedules ?? {}) as Record<
         string,
-        { proGamesByScoringPeriod?: Record<string, unknown[]> }
+        { proGamesByScoringPeriod?: Record<string, Array<{ date?: number }>> }
       >;
 
       const { myTeam, opponentName, myStats, opponentStats, currentPeriod } =
-        await fetchMatchupData(league, scoringConfig, players);
+        await fetchMatchupData(league!, scoringConfig, players);
 
-      // Build free agent list
-      const ownedIds = new Set(league.teams.flatMap((t) => t.rosterPlayerIds));
-      const freeAgents = players.filter((p) => !ownedIds.has(p.playerId));
+      // Build owned IDs from raw ESPN roster data (includes ALL lineup slots — IR, bench, etc.)
+      // This is more accurate than league.teams[].rosterPlayerIds which strips IR players.
+      const rawTeams = (leagueWithSchedule?.teams ?? []) as Array<{
+        roster?: { entries?: Array<{ playerId?: number; id?: number }> };
+      }>;
+      const ownedIds =
+        rawTeams.length > 0
+          ? new Set<number>(
+              rawTeams.flatMap((t) =>
+                (t.roster?.entries ?? [])
+                  .map((e) => e.playerId ?? e.id)
+                  .filter((id): id is number => typeof id === "number")
+              )
+            )
+          : new Set<number>(league!.teams.flatMap((t) => t.rosterPlayerIds)); // fallback
+      const INACTIVE_STATUSES = new Set(["OUT", "INJURY_RESERVE", "DOUBTFUL", "DAY_TO_DAY"]);
+      const freeAgents = players.filter(
+        (p) => !ownedIds.has(p.playerId) && !INACTIVE_STATUSES.has(p.injuryStatus ?? "")
+      );
       const myRosterPlayers = players.filter((p) => myTeam.rosterPlayerIds.includes(p.playerId));
+
+      // Detect which pro teams have a game today (NY timezone = NBA game calendar).
+      // Primary: match each game's date field against today's NY date.
+      // ESPN may send epoch-ms (13 digits) or epoch-s (10 digits) — handle both.
+      // Fallback: if date matching finds nothing, use period-key presence instead.
+      const nyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" });
+      const todayNY = nyFmt.format(new Date());
+      const proTeamsWithRelevantGame = new Set<string>();
+
+      for (const [proTeamId, teamData] of Object.entries(proTeamSchedules)) {
+        let found = false;
+        outer: for (const games of Object.values(teamData.proGamesByScoringPeriod ?? {})) {
+          for (const game of games) {
+            if (game.date == null) continue;
+            // Normalize: values < 1e11 are likely epoch-seconds, convert to ms
+            const ts = game.date > 1e11 ? game.date : game.date * 1000;
+            if (nyFmt.format(new Date(ts)) === todayNY) { found = true; break outer; }
+          }
+        }
+        if (found) proTeamsWithRelevantGame.add(proTeamId);
+      }
+
+      // Fallback: date field missing or never matched — use scoring-period key presence.
+      // Try currentPeriod-1 first (ESPN often advances scoringPeriodId to tomorrow),
+      // then currentPeriod. Stop once we find a period with games for 3+ teams.
+      if (proTeamsWithRelevantGame.size === 0) {
+        for (const p of [String(currentPeriod - 1), String(currentPeriod)]) {
+          for (const [proTeamId, teamData] of Object.entries(proTeamSchedules)) {
+            if ((teamData.proGamesByScoringPeriod?.[p]?.length ?? 0) > 0)
+              proTeamsWithRelevantGame.add(proTeamId);
+          }
+          if (proTeamsWithRelevantGame.size > 3) break;
+          proTeamsWithRelevantGame.clear(); // not enough teams — try next period
+        }
+      }
 
       // Rank free agents by matchup relevance
       const ranked = rankFreeAgents(freeAgents, myStats, opponentStats, scoringConfig);
 
-      // Attach game counts from proTeamSchedules
-      const rankedWithGames = ranked.slice(0, 20).map((p) => {
-        const proTeamId = p.teamAbbrev; // stored as string proTeamId
+      // Multi-window lookup maps — read from ref so latest data is always used
+      // even when playersSeason/players15d/players7d haven't yet loaded at callback creation time.
+      const { season: wSeason, p15d: w15d, p7d: w7d } = windowPlayersRef.current;
+      const seasonMap = new Map(wSeason.map((p) => [p.playerId, p]));
+      const map15d    = new Map(w15d.map((p)   => [p.playerId, p]));
+      const map7d     = new Map(w7d.map((p)    => [p.playerId, p]));
+
+      // Attach game counts + relevant-game flag + all stat windows
+      const rankedWithGames = ranked.slice(0, 25).map((p) => {
+        const proTeamId = p.teamAbbrev;
         const gamesThisWeek =
           proTeamSchedules[proTeamId]?.proGamesByScoringPeriod?.[String(currentPeriod)]?.length ?? undefined;
-        return { ...p, gamesThisWeek };
+        const hasRelevantGame = proTeamsWithRelevantGame.has(String(proTeamId));
+        const windows: Partial<Record<string, PlayerStats>> = { "30d": p };
+        const sp  = seasonMap.get(p.playerId);
+        const p15 = map15d.get(p.playerId);
+        const p7  = map7d.get(p.playerId);
+        if (sp)  windows["season"] = sp as PlayerStats;
+        if (p15) windows["15d"]    = p15 as PlayerStats;
+        if (p7)  windows["7d"]     = p7 as PlayerStats;
+        return { ...p, gamesThisWeek, hasRelevantGame, windows };
+      });
+      // Sort: players with an upcoming game first, then by matchup ranking
+      rankedWithGames.sort((a, b) => {
+        if (a.hasRelevantGame !== b.hasRelevantGame) return a.hasRelevantGame ? -1 : 1;
+        return 0;
       });
 
       const systemPrompt = buildSystemPrompt("daily");
       const userPrompt = buildDailyPrompt({
         sportName: sportCfg.name,
+        sport,
         scoringConfig,
         myTeamName: myTeam.name,
         myRoster: myRosterPlayers.map((p) => ({ name: p.playerName, position: p.position })),
@@ -434,7 +631,6 @@ export default function CoachPage() {
         }
       }
 
-      const today = new Date().toISOString().split("T")[0];
       const advice: CoachAdvice = {
         type: "daily",
         insights,
@@ -442,164 +638,56 @@ export default function CoachPage() {
         opponentName,
         topPlayerIds: topPlayerIds.length > 0 ? topPlayerIds : undefined,
       };
-      setCoachCache(`ai_coach_daily_${leagueId}_${sport}_${today}`, advice);
+      setCoachCache(`ai_coach_daily_v10_${leagueId}_${sport}_${getNYDateStr()}`, advice);
       setDailyAdvice(advice);
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       setDailyError((err as Error).message);
     } finally {
       setDailyLoading(false);
-      dailyBusy.current = false;
+      (dailyBusy as { current: boolean }).current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid]);
+  }, [league, players, scoringConfig, leagueId, sport, espnS2, swid, provider]); // window arrays accessed via ref — omitted intentionally
 
-  // ── Fetch trade advice ────────────────────────────────────────────────────
+  // ── Stable refs so the sequential effect never re-fires due to callback identity changes ──
+  // fetchWeeklyAdvice / fetchDailyAdvice recreate when player arrays load (players7d etc.),
+  // which would abort the controller mid-sequence and leave daily stuck. Using refs fixes this.
+  const fetchWeeklyRef = useRef(fetchWeeklyAdvice);
+  const fetchDailyRef  = useRef(fetchDailyAdvice);
+  useEffect(() => { fetchWeeklyRef.current = fetchWeeklyAdvice; }, [fetchWeeklyAdvice]);
+  useEffect(() => { fetchDailyRef.current  = fetchDailyAdvice;  }, [fetchDailyAdvice]);
 
-  const fetchTradeAdvice = useCallback(async (bypassCache = false, signal?: AbortSignal) => {
-    if (tradeBusy.current || !league) return;
-    tradeBusy.current = true;
-    setTradeLoading(true);
-    setTradeError(null);
-
-    try {
-      const period = league.scoringPeriodId;
-      if (!bypassCache) {
-        const cached = getWeeklyCache(leagueId, sport, period, "trade");
-        if (cached) { setTradeAdvice(cached); return; }
-      }
-
-      // Aggregate stats for every team
-      const allTeamStats = league.teams.map((team) => {
-        const roster = players.filter((p) => team.rosterPlayerIds.includes(p.playerId));
-        const stats = aggregateStats(roster, scoringConfig);
-        const rosterNames = roster.slice(0, 8).map((p) => p.playerName);
-        return { name: team.name, stats, roster: rosterNames, id: team.id };
-      });
-
-      // Find my team
-      const myTeamEntry = allTeamStats.find((t) =>
-        league.teams.find((lt) => lt.id === t.id && swidMatchesOwner(swid, lt.ownerId))
-      );
-      if (!myTeamEntry) throw new Error("Could not identify your team.");
-
-      // Compute league average
-      const leagueAvg: Record<string, number> = {};
-      for (const cat of scoringConfig.cats) {
-        const sum = allTeamStats.reduce((acc, t) => acc + (t.stats[cat.id] ?? 0), 0);
-        leagueAvg[cat.id] = sum / allTeamStats.length;
-      }
-
-      // Compute strong/weak cats
-      const myStats = myTeamEntry.stats;
-      const strongCats = scoringConfig.cats
-        .filter((c) =>
-          c.lowerIsBetter
-            ? (myStats[c.id] ?? 0) <= (leagueAvg[c.id] ?? 0)
-            : (myStats[c.id] ?? 0) >= (leagueAvg[c.id] ?? 0)
-        )
-        .sort((a, b) => {
-          const da = a.lowerIsBetter
-            ? (leagueAvg[a.id] ?? 0) - (myStats[a.id] ?? 0)
-            : (myStats[a.id] ?? 0) - (leagueAvg[a.id] ?? 0);
-          const db = b.lowerIsBetter
-            ? (leagueAvg[b.id] ?? 0) - (myStats[b.id] ?? 0)
-            : (myStats[b.id] ?? 0) - (leagueAvg[b.id] ?? 0);
-          return db - da;
-        })
-        .slice(0, 3)
-        .map((c) => c.id);
-
-      const weakCats = scoringConfig.cats
-        .filter((c) =>
-          c.lowerIsBetter
-            ? (myStats[c.id] ?? 0) > (leagueAvg[c.id] ?? 0)
-            : (myStats[c.id] ?? 0) < (leagueAvg[c.id] ?? 0)
-        )
-        .sort((a, b) => {
-          const da = a.lowerIsBetter
-            ? (myStats[a.id] ?? 0) - (leagueAvg[a.id] ?? 0)
-            : (leagueAvg[a.id] ?? 0) - (myStats[a.id] ?? 0);
-          const db = b.lowerIsBetter
-            ? (myStats[b.id] ?? 0) - (leagueAvg[b.id] ?? 0)
-            : (leagueAvg[b.id] ?? 0) - (myStats[b.id] ?? 0);
-          return db - da;
-        })
-        .slice(0, 3)
-        .map((c) => c.id);
-
-      const systemPrompt = buildSystemPrompt("trade");
-      const userPrompt = buildTradePrompt({
-        sportName: sportCfg.name,
-        scoringConfig,
-        myTeamName: myTeamEntry.name,
-        myStats,
-        leagueAvgStats: leagueAvg,
-        strongCats,
-        weakCats,
-        allTeams: allTeamStats.filter((t) => t.name !== myTeamEntry.name),
-      });
-
-      const insights = await callAI("trade", systemPrompt, userPrompt, signal);
-      const advice: CoachAdvice = {
-        type: "trade",
-        insights,
-        generatedAt: new Date().toISOString(),
-        matchupPeriodId: period,
-      };
-      setCoachCache(`ai_coach_trade_${leagueId}_${sport}_${period}`, advice);
-      setTradeAdvice(advice);
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      setTradeError((err as Error).message);
-    } finally {
-      setTradeLoading(false);
-      tradeBusy.current = false;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league, players, scoringConfig, leagueId, sport, swid]);
-
-  // ── Auto-fetch on mount (weekly → daily → trade, strictly sequential) ──────
-  // Sequential ensures only one AI request is in-flight at a time,
-  // preventing 429 rate-limit errors on free-tier providers (e.g. Gemini 15 RPM).
+  // ── Auto-fetch on mount (weekly → daily, strictly sequential) ───────────────
+  // Only re-fires when the league / sport changes, not on every player-data reload.
 
   useEffect(() => {
     if (!dataReady || weeklyAutoFetched.current) return;
     weeklyAutoFetched.current = true;
-    dailyAutoFetched.current = true;
-    tradeAutoFetched.current = true;
+    dailyAutoFetched.current  = true;
 
     const period = league!.scoringPeriodId;
-
     const controller = new AbortController();
     const { signal } = controller;
 
     async function runSequential() {
-      // Weekly — cache check first to avoid loading flash
+      // Weekly — serve from cache instantly if available (v2 keys)
       const wCached = getWeeklyCache(leagueId, sport, period, "weekly");
       if (wCached) setWeeklyAdvice(wCached);
-      else await fetchWeeklyAdvice(false, signal);
+      else await fetchWeeklyRef.current(false, signal);
 
-      // Stop here if user navigated away (abort cancels the in-flight request too)
-      if (signal.aborted) return;
+      if (signal.aborted) return; // user navigated away
 
       // Daily — only starts after weekly fully completes
       const dCached = getDailyCache(leagueId, sport);
       if (dCached) setDailyAdvice(dCached);
-      else await fetchDailyAdvice(false, signal);
-
-      if (signal.aborted) return;
-
-      // Trade — only starts after daily fully completes
-      const tCached = getWeeklyCache(leagueId, sport, period, "trade");
-      if (tCached) setTradeAdvice(tCached);
-      else await fetchTradeAdvice(false, signal);
+      else await fetchDailyRef.current(false, signal);
     }
 
     runSequential();
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataReady, leagueId, sport, league, fetchWeeklyAdvice, fetchDailyAdvice, fetchTradeAdvice]);
+  }, [dataReady, leagueId, sport]); // league/fetchXxx deliberately omitted — captured via refs above
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -630,11 +718,10 @@ export default function CoachPage() {
         </div>
       )}
 
-      {/* Off-season banner for weekly/daily */}
+      {/* Off-season banner */}
       {isOffSeason && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300">
           {sportCfg?.name} is in off-season — weekly and daily advice require an active matchup.
-          Trade analysis still works.
         </div>
       )}
 
@@ -646,37 +733,25 @@ export default function CoachPage() {
             title="Weekly Matchup"
             description="5 strategic insights for your current H2H matchup — categories to attack, categories to protect, and key roster moves."
             updateCadence="Updates every matchup period"
-            opponentBadge={weeklyAdvice?.opponentName ? `This week vs ${weeklyAdvice.opponentName}` : undefined}
+            opponentBadge={weeklyAdvice?.opponentName ? `This week vs ${weeklyAdvice?.opponentName}` : undefined}
             advice={isOffSeason ? null : weeklyAdvice}
             loading={weeklyLoading}
             error={isOffSeason ? null : weeklyError}
-            onRefresh={() => fetchWeeklyAdvice(true)}
           />
 
           <CoachCard
             icon="📋"
             title="Daily Pickups"
-            description="5 waiver wire recommendations based on free agents who can help you win your current matchup, ranked by game count and category impact."
-            updateCadence="Updates once a day"
-            opponentBadge={dailyAdvice?.opponentName ? `vs ${dailyAdvice.opponentName}` : undefined}
+            description="5 waiver wire recommendations for free agents who can boost your matchup, prioritizing players with games today or tomorrow."
+            updateCadence={`Updates daily at ${getDailyUpdateTime()}`}
+            opponentBadge={dailyAdvice?.opponentName ? `vs ${dailyAdvice?.opponentName}` : undefined}
             advice={isOffSeason ? null : dailyAdvice}
             loading={dailyLoading}
             error={isOffSeason ? null : dailyError}
-            onRefresh={() => fetchDailyAdvice(true)}
             showHeadshotRow
             cdnLeague={cdnLeague}
           />
 
-          <CoachCard
-            icon="🔁"
-            title="Trade Ideas"
-            description="3 trade packages tailored to your roster — sends surplus from your strengths to fix your weakest categories vs the rest of the league."
-            updateCadence="Updates every matchup period"
-            advice={tradeAdvice}
-            loading={tradeLoading}
-            error={tradeError}
-            onRefresh={() => fetchTradeAdvice(true)}
-          />
         </>
       )}
     </div>

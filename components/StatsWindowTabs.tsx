@@ -6,6 +6,7 @@ const ALL_WINDOWS: { label: string; value: StatsWindow }[] = [
   { label: "Season", value: "season" },
   { label: "30D",    value: "30" },
   { label: "15D",    value: "15" },
+  { label: "14D",    value: "14" },
   { label: "7D",     value: "7" },
   { label: "26 Proj", value: "proj" },
 ];

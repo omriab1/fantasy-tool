@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { usePlayers } from "@/hooks/usePlayers";
-import { useLeague } from "@/hooks/useLeague";
+import { useFantasyLeague } from "@/hooks/useFantasyLeague";
+import { useFantasyPlayers } from "@/hooks/useFantasyPlayers";
 import { aggregateStats } from "@/lib/stat-calculator";
 import { calcTradeScore } from "@/lib/trade-score";
 import { scoringConfigLabel } from "@/lib/scoring-config";
@@ -14,7 +14,7 @@ import { CategoryTable } from "@/components/CategoryTable";
 import { VerdictBanner } from "@/components/VerdictBanner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ShareModal } from "@/components/ShareModal";
-import type { StatsWindow, EspnSport } from "@/lib/types";
+import type { StatsWindow, EspnSport, FantasyProvider } from "@/lib/types";
 import Link from "next/link";
 
 function windowLabel(w: StatsWindow): string {
@@ -29,6 +29,11 @@ export default function TradePage() {
   const [swid, setSwid] = useState("");
   const [sport, setSport] = useState<EspnSport>("fba");
   const [statsWindow, setStatsWindow] = useState<StatsWindow>("season");
+  const [provider, setProvider] = useState<FantasyProvider>("espn");
+  const [yahooLeagueKey, setYahooLeagueKey] = useState("");
+  const [yahooB, setYahooB] = useState("");
+  const [yahooT, setYahooT] = useState("");
+  const [yahooAccessToken, setYahooAccessToken] = useState("");
 
   const [givingIds, setGivingIds] = useState<number[]>([]);
   const [receivingIds, setReceivingIds] = useState<number[]>([]);
@@ -36,25 +41,38 @@ export default function TradePage() {
 
   useEffect(() => {
     function readSettings() {
+      const p = (localStorage.getItem("fantasy_provider") as FantasyProvider | null) ?? "espn";
+      setProvider(p);
       const storedSport = (localStorage.getItem("espn_sport") as EspnSport | null) ?? "fba";
       const validSport  = storedSport in SPORT_CONFIGS ? storedSport : "fba";
       setSport(validSport);
-      // Only fall back to the legacy key for NBA (fba) — other sports must have their own saved ID
       const leagueIdFallback = validSport === "fba" ? (localStorage.getItem("espn_leagueId") ?? "") : "";
       setLeagueId(localStorage.getItem(`espn_leagueId_${validSport}`) ?? leagueIdFallback);
       setEspnS2(localStorage.getItem("espn_s2") ?? "");
       setSwid(localStorage.getItem("espn_swid") ?? "");
+      setYahooLeagueKey(localStorage.getItem("yahoo_league_key_nba") ?? "");
+      setYahooB(localStorage.getItem("yahoo_b") ?? "");
+      setYahooT(localStorage.getItem("yahoo_t") ?? "");
+      setYahooAccessToken(localStorage.getItem("yahoo_access_token") ?? "");
     }
     readSettings();
-    window.addEventListener("espn-settings-changed", readSettings);
-    return () => window.removeEventListener("espn-settings-changed", readSettings);
+    window.addEventListener("fantasy-settings-changed", readSettings);
+    return () => window.removeEventListener("fantasy-settings-changed", readSettings);
   }, []);
 
   const sportConfig = SPORT_CONFIGS[sport];
 
-  // scoringConfig is auto-detected from league settings
-  const { league, scoringConfig } = useLeague(leagueId, espnS2, swid, sport);
-  const { players, loading, error, reload } = usePlayers(leagueId, espnS2, swid, statsWindow, sport, league?.activeLineupSlotIds);
+  // Provider-aware league + players hooks
+  const { league, scoringConfig } = useFantasyLeague({
+    provider,
+    espn: { leagueId, espnS2, swid, sport },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT },
+  });
+  const { players, loading, error, reload } = useFantasyPlayers({
+    provider,
+    espn: { leagueId, espnS2, swid, window: statsWindow, sport, activeSlotIds: league?.activeLineupSlotIds },
+    yahoo: { leagueKey: yahooLeagueKey, b: yahooB, t: yahooT, window: statsWindow },
+  });
 
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
@@ -81,7 +99,9 @@ export default function TradePage() {
   }, [giving, receiving, givingIds, receivingIds, players, scoringConfig]);
 
   const allBucketedIds = [...givingIds, ...receivingIds];
-  const noSettings = !leagueId || !espnS2 || !swid;
+  const noSettings = provider === "yahoo"
+    ? !yahooLeagueKey || (!yahooB && !yahooAccessToken)
+    : !leagueId || !espnS2 || !swid;
   const windowNote = getStatsWindowNote(sportConfig, statsWindow);
   // For off-season sports, hide the player UI on any window other than "season"
   // (e.g. WNBA proj loads 2025 projection data but those stats aren't meaningful for 2026)
@@ -99,14 +119,14 @@ export default function TradePage() {
         <StatsWindowTabs
           value={statsWindow}
           onChange={setStatsWindow}
-          availableWindows={sportConfig.availableWindows}
+          availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
           size="md"
         />
       </div>
 
       {noSettings && (
         <div className="mb-6 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 text-sm text-yellow-300">
-          Set your League ID and ESPN credentials in{" "}
+          Set your {provider === "yahoo" ? "Yahoo league key" : "League ID and ESPN credentials"} in{" "}
           <Link href="/settings" className="underline hover:text-yellow-200">Settings</Link>{" "}
           to load player data.
         </div>
@@ -175,7 +195,7 @@ export default function TradePage() {
               </p>
               {scoringConfig.cats.some((c) => c.volumeStatIds) && (
                 <p className="text-center text-xs text-gray-700 -mt-2">
-                  {scoringConfig.cats.filter((c) => c.volumeStatIds).map((c) => c.id.replace("%", "").trim()).join(", ")} made/attempted shown as on ESPN · % uses full accuracy
+                  {scoringConfig.cats.filter((c) => c.volumeStatIds).map((c) => c.id.replace("%", "").trim()).join(", ")} made/attempted shown as on {provider === "yahoo" ? "Yahoo" : "ESPN"} · % uses full accuracy
                 </p>
               )}
 
@@ -185,7 +205,7 @@ export default function TradePage() {
                 <StatsWindowTabs
                   value={statsWindow}
                   onChange={setStatsWindow}
-                  availableWindows={sportConfig.availableWindows}
+                  availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                 />
               </div>
 

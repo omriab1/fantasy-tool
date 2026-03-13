@@ -6,8 +6,8 @@ import type { SportConfig } from "@/lib/sports-config";
 import type { EspnSport } from "@/lib/types";
 
 function subscribe(callback: () => void) {
-  window.addEventListener("espn-settings-changed", callback);
-  return () => window.removeEventListener("espn-settings-changed", callback);
+  window.addEventListener("fantasy-settings-changed", callback);
+  return () => window.removeEventListener("fantasy-settings-changed", callback);
 }
 
 function getSnapshot(): EspnSport {

@@ -78,7 +78,9 @@ export interface PlayerStats {
   /** ESPN pre-computed per-game fantasy points average for this player/window (points leagues only) */
   appliedAverage?: number;
   injuryStatus?: string;
-  /** Full ESPN stats dict — every stat ID available for dynamic league support */
+  /** Player headshot URL (set by Yahoo; ESPN uses id-based ESPN CDN URL) */
+  headshotUrl?: string;
+  /** Full stats dict — every stat ID available for dynamic league support */
   rawStats: Record<number, number>;
 }
 
@@ -121,6 +123,8 @@ export interface LeagueInfo {
   seasonId: number;
   scoringPeriodId: number;
   teams: LeagueTeam[];
+  /** Human-readable league name (e.g. "Kevin's Fantasy League"). Yahoo only; optional. */
+  name?: string;
   /** Lineup slot IDs with count > 0 in this league's roster settings.
    *  Used to filter player position labels to only slots the league actually uses. */
   activeLineupSlotIds?: number[];
@@ -169,7 +173,22 @@ export interface SavedLeague {
   label?: string;
 }
 
-export type StatsWindow = "season" | "30" | "15" | "7" | "proj";
+export type StatsWindow = "season" | "30" | "15" | "14" | "7" | "proj";
+
+// ─── Yahoo / Multi-provider types ─────────────────────────────────────────────
+
+/** Which fantasy sports provider is active. Stored in localStorage as "fantasy_provider". */
+export type FantasyProvider = "espn" | "yahoo";
+
+/** A saved Yahoo Fantasy league — uses a league_key instead of a numeric ID. */
+export interface YahooSavedLeague {
+  /** Yahoo league key: "{game_key}.l.{league_id}" e.g. "428.l.19877" */
+  key: string;
+  /** User-set display name for this league */
+  label?: string;
+  /** Auto-detected team name via manager GUID matching */
+  teamName?: string;
+}
 
 export interface EspnPlayerInfo {
   playerId: number;
