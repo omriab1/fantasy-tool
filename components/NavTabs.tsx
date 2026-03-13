@@ -10,7 +10,8 @@ const TABS = [
   { lines: ["Trade", "Analyzer"], href: "/trade" },
   { lines: ["Compare", "Teams"],  href: "/compare" },
   { lines: ["Power", "Ranking"],  href: "/power" },
-  { lines: ["AI", "Coach"],       href: "/coach", soon: true },
+  // AI Coach hidden — to re-enable: uncomment the line below
+  // { lines: ["AI", "Coach"],       href: "/coach", soon: true },
   { lines: ["Settings"],          href: "/settings" },
 ];
 
@@ -74,19 +75,6 @@ export function NavTabs() {
           <div className="hidden sm:flex gap-1 ml-6">
             {TABS.map((tab) => {
               const active = pathname.startsWith(tab.href);
-              if (tab.soon) {
-                return (
-                  <span
-                    key={tab.href}
-                    className="relative px-3 py-1.5 rounded text-center flex flex-col items-center justify-center text-gray-600 cursor-not-allowed select-none"
-                  >
-                    <span className="absolute -top-1.5 -right-1 text-[9px] bg-[#1a1f2e] border border-amber-500/40 px-1 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
-                    {tab.lines.map((line, i) => (
-                      <span key={i} className="block text-xs font-medium leading-tight">{line}</span>
-                    ))}
-                  </span>
-                );
-              }
               return (
                 <Link
                   key={tab.href}
@@ -163,17 +151,6 @@ export function NavTabs() {
           <div className="sm:hidden border-t border-white/10 bg-[#1a1f2e]">
             {TABS.map((tab) => {
               const active = pathname.startsWith(tab.href);
-              if (tab.soon) {
-                return (
-                  <span
-                    key={tab.href}
-                    className="flex items-center justify-between px-5 py-3.5 text-sm font-medium border-b border-white/5 text-gray-600 cursor-not-allowed select-none"
-                  >
-                    {tab.lines.join(" ")}
-                    <span className="text-[9px] border border-amber-500/40 px-1.5 py-px rounded-full font-semibold text-amber-400/90 leading-none">Soon</span>
-                  </span>
-                );
-              }
               return (
                 <Link
                   key={tab.href}
