@@ -152,6 +152,10 @@ function parseYahooLeagueData(data: Record<string, unknown>): LeagueInfo {
 /**
  * Extract Yahoo league settings for scoring config parsing.
  * Returns the settings object from fantasy_content.league[1].settings
+ *
+ * Yahoo sometimes double-wraps settings as a fake-array:
+ *   league[1].settings = { "0": { stat_categories: {...}, ... } }
+ * In that case we unwrap and return settings["0"].
  */
 function extractYahooSettings(data: Record<string, unknown>): unknown {
   try {
@@ -160,7 +164,13 @@ function extractYahooSettings(data: Record<string, unknown>): unknown {
     const leagueArr = fc?.league as unknown[];
     if (!Array.isArray(leagueArr) || leagueArr.length < 2) return null;
     const leagueData = leagueArr[1] as Record<string, unknown> | undefined;
-    return leagueData?.settings ?? null;
+    const settings = leagueData?.settings as Record<string, unknown> | null ?? null;
+    if (!settings) return null;
+    // Unwrap extra fake-array layer: settings = {"0": {stat_categories:…}, …}
+    if (!settings.stat_categories && settings["0"]) {
+      return settings["0"] as Record<string, unknown>;
+    }
+    return settings;
   } catch {
     return null;
   }

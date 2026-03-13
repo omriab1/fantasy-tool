@@ -3,9 +3,11 @@
  *
  * GET /api/yahoo/players?leagueKey=466.l.375776&window=season
  *
- * Two-step approach (more reliable than out=stats on league endpoint):
- *   Step 1: GET /league/{key}/players;sort=AR;count=25;start={n}?format=json
- *           → paginate to collect all player_keys (up to MAX_TOTAL_PLAYERS)
+ * Two-step approach:
+ *   Step 1: GET /game/{gameKey}/players;sort=OR;count=25;start={n}?format=json
+ *           → paginate game-level player pool (ALL players, rostered or not)
+ *           → league/players;sort=AR only returns available (FA/waiver) players,
+ *             so we use the game endpoint to get the full roster.
  *   Step 2: GET /players;player_keys={p1,p2,...};out=stats?stat_type={type}&format=json
  *           → batch-fetch stats for collected keys (25 per request)
  *
@@ -21,7 +23,7 @@ import { YAHOO_STAT } from "@/lib/yahoo-scoring-config";
 
 const YAHOO_API_BASE = "https://fantasysports.yahooapis.com/fantasy/v2";
 const PLAYERS_PER_PAGE = 25;
-const MAX_TOTAL_PLAYERS = 300;
+const MAX_TOTAL_PLAYERS = 600; // NBA has ~450-500 active players per season
 
 const WINDOW_TO_STAT_TYPE: Record<string, string> = {
   season:  "season_stats",
@@ -57,58 +59,60 @@ function parseStatValue(value: unknown): { value: number; attempted?: number } {
   return { value: isNaN(num) ? 0 : num };
 }
 
-interface ParsedPlayer {
-  playerKey: string;
+interface PlayerMeta {
+  key: string;
   name: string;
   teamAbbrev: string;
   position: string;
   imageUrl: string;
-  rawStats: Record<number, number>;
-  gp: number;
+}
+
+/** Parse a Yahoo players fake-array object into PlayerMeta[]. */
+function extractPlayersFromObj(playersObj: Record<string, unknown>): PlayerMeta[] {
+  const results: PlayerMeta[] = [];
+  const count = Number(playersObj.count ?? 0);
+  for (let i = 0; i < count; i++) {
+    const pEntry = playersObj[String(i)] as Record<string, unknown> | undefined;
+    const pArr = pEntry?.player as unknown[];
+    if (!Array.isArray(pArr) || pArr.length < 1) continue;
+
+    const metaArr = pArr[0] as unknown[];
+    if (!Array.isArray(metaArr)) continue;
+
+    let key = "", name = "Unknown", teamAbbrev = "", position = "", imageUrl = "";
+    for (const m of metaArr) {
+      const mObj = m as Record<string, unknown> | undefined;
+      if (!mObj) continue;
+      if (mObj.player_key) key = String(mObj.player_key);
+      if (mObj.full_name) name = String(mObj.full_name);
+      if (mObj.editorial_team_abbr) teamAbbrev = String(mObj.editorial_team_abbr).toUpperCase();
+      if (mObj.display_position) position = String(mObj.display_position);
+      else if (mObj.primary_position && !position) position = String(mObj.primary_position);
+      if (mObj.image_url) imageUrl = String(mObj.image_url);
+      if (mObj.name && typeof mObj.name === "object") {
+        const n = mObj.name as Record<string, unknown>;
+        if (n.full) name = String(n.full);
+      }
+    }
+    if (key) results.push({ key, name, teamAbbrev, position, imageUrl });
+  }
+  return results;
 }
 
 /**
- * Extract player keys + metadata from a league players list response.
- * Response: fantasy_content.league[1].players.{n}.player[0] = metadata array
+ * Extract player metadata from a game players response.
+ * Response: fantasy_content.game[1].players = fake-array
  */
-function extractLeaguePlayers(data: unknown): Array<{ key: string; name: string; teamAbbrev: string; position: string; imageUrl: string }> {
-  const results: Array<{ key: string; name: string; teamAbbrev: string; position: string; imageUrl: string }> = [];
+function extractGamePlayers(data: unknown): PlayerMeta[] {
   try {
     const fc = (data as Record<string, unknown>)?.fantasy_content as Record<string, unknown>;
-    const league = fc?.league as unknown[];
-    if (!Array.isArray(league) || league.length < 2) return results;
-    const leagueData = league[1] as Record<string, unknown>;
-    const playersObj = leagueData?.players as Record<string, unknown>;
-    if (!playersObj) return results;
-
-    const count = Number(playersObj.count ?? 0);
-    for (let i = 0; i < count; i++) {
-      const pEntry = playersObj[String(i)] as Record<string, unknown> | undefined;
-      const pArr = pEntry?.player as unknown[];
-      if (!Array.isArray(pArr) || pArr.length < 1) continue;
-
-      const metaArr = pArr[0] as unknown[];
-      if (!Array.isArray(metaArr)) continue;
-
-      let key = "", name = "Unknown", teamAbbrev = "", position = "", imageUrl = "";
-      for (const m of metaArr) {
-        const mObj = m as Record<string, unknown> | undefined;
-        if (!mObj) continue;
-        if (mObj.player_key) key = String(mObj.player_key);
-        if (mObj.full_name) name = String(mObj.full_name);
-        if (mObj.editorial_team_abbr) teamAbbrev = String(mObj.editorial_team_abbr).toUpperCase();
-        if (mObj.display_position) position = String(mObj.display_position);
-        else if (mObj.primary_position && !position) position = String(mObj.primary_position);
-        if (mObj.image_url) imageUrl = String(mObj.image_url);
-        if (mObj.name && typeof mObj.name === "object") {
-          const n = mObj.name as Record<string, unknown>;
-          if (n.full) name = String(n.full);
-        }
-      }
-      if (key) results.push({ key, name, teamAbbrev, position, imageUrl });
-    }
-  } catch { /* ignore */ }
-  return results;
+    const game = fc?.game as unknown[];
+    if (!Array.isArray(game) || game.length < 2) return [];
+    const gameData = game[1] as Record<string, unknown>;
+    const playersObj = gameData?.players as Record<string, unknown>;
+    if (!playersObj) return [];
+    return extractPlayersFromObj(playersObj);
+  } catch { return []; }
 }
 
 /**
@@ -183,11 +187,16 @@ export async function GET(req: NextRequest) {
 
   const statType = WINDOW_TO_STAT_TYPE[window] ?? "season_stats";
 
-  // ── Step 1: Collect all player keys + metadata ──────────────────────────────
-  const leaguePlayers: Array<{ key: string; name: string; teamAbbrev: string; position: string; imageUrl: string }> = [];
+  // Extract game key from league key: "466.l.375776" → "466"
+  const gameKey = leagueKey.split(".l.")[0] ?? leagueKey;
+
+  // ── Step 1: Collect all player keys + metadata from game player pool ─────────
+  // Using /game/{gameKey}/players instead of /league/{key}/players;sort=AR
+  // because sort=AR only returns available (FA/waiver) players, not rostered ones.
+  const allPlayers: PlayerMeta[] = [];
 
   for (let start = 0; start < MAX_TOTAL_PLAYERS; start += PLAYERS_PER_PAGE) {
-    const url = `${YAHOO_API_BASE}/league/${leagueKey}/players;sort=AR;count=${PLAYERS_PER_PAGE};start=${start}?format=json`;
+    const url = `${YAHOO_API_BASE}/game/${gameKey}/players;sort=OR;count=${PLAYERS_PER_PAGE};start=${start}?format=json`;
     try {
       const res = await yahooFetch(url, accessToken, b, t);
       if (!res.ok) {
@@ -201,9 +210,9 @@ export async function GET(req: NextRequest) {
         break;
       }
       const data = JSON.parse(await res.text());
-      const page = extractLeaguePlayers(data);
-      leaguePlayers.push(...page);
-      if (page.length < PLAYERS_PER_PAGE) break;
+      const page = extractGamePlayers(data);
+      allPlayers.push(...page);
+      if (page.length < PLAYERS_PER_PAGE) break; // last page
     } catch (err) {
       if (start === 0) return NextResponse.json({ error: "Network error", detail: String(err) }, { status: 502 });
       break;
@@ -211,14 +220,14 @@ export async function GET(req: NextRequest) {
   }
 
   if (debug) {
-    return NextResponse.json({ step: "keys", totalKeys: leaguePlayers.length, sample: leaguePlayers.slice(0, 3) });
+    return NextResponse.json({ step: "keys", totalKeys: allPlayers.length, sample: allPlayers.slice(0, 3) });
   }
 
-  if (leaguePlayers.length === 0) return NextResponse.json([]);
+  if (allPlayers.length === 0) return NextResponse.json([]);
 
   // ── Step 2: Batch-fetch stats for collected keys ─────────────────────────────
   const allStats = new Map<string, { rawStats: Record<number, number>; gp: number }>();
-  const keys = leaguePlayers.map(p => p.key);
+  const keys = allPlayers.map(p => p.key);
   const debugStep2 = searchParams.get("debug") === "2";
 
   for (let i = 0; i < keys.length; i += PLAYERS_PER_PAGE) {
@@ -241,7 +250,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Normalize to PlayerStats shape ──────────────────────────────────────────
-  const normalized = leaguePlayers.map(p => {
+  const normalized = allPlayers.map(p => {
     const stats = allStats.get(p.key) ?? { rawStats: {}, gp: 0 };
     const rs = stats.rawStats;
     const idMatch = p.key.match(/\.p\.(\d+)$/);

@@ -36,12 +36,25 @@ export async function GET(req: NextRequest) {
     const fc       = (data as { fantasy_content?: Record<string, unknown> }).fantasy_content;
     const arr      = fc?.league as unknown[];
     const leaf     = Array.isArray(arr) && arr.length > 1 ? (arr[1] as Record<string, unknown>) : null;
-    const settings = leaf?.settings as Record<string, unknown> | null ?? null;
+    const rawSettings = leaf?.settings as Record<string, unknown> | null ?? null;
+
+    // Unwrap extra fake-array layer: settings = {"0": {stat_categories:…}, …}
+    const settings: Record<string, unknown> | null =
+      rawSettings && !rawSettings.stat_categories && rawSettings["0"]
+        ? rawSettings["0"] as Record<string, unknown>
+        : rawSettings;
+
+    const statCats = settings?.stat_categories as Record<string, unknown> | null ?? null;
+    const statCatsStats = statCats?.stats as Record<string, unknown> | null ?? null;
 
     return NextResponse.json({
-      settings_keys:       settings ? Object.keys(settings) : null,
-      stat_categories_raw: settings?.stat_categories ?? null,
-      stat_modifiers_raw:  settings?.stat_modifiers  ?? null,
+      leaf_keys:               leaf ? Object.keys(leaf) : null,
+      raw_settings_keys:       rawSettings ? Object.keys(rawSettings) : null,
+      settings_keys:           settings ? Object.keys(settings) : null,
+      stat_categories_raw:     statCats,
+      stat_categories_stats:   statCatsStats,
+      stat_categories_stats_stat: statCatsStats?.stat ?? null,
+      stat_modifiers_raw:      settings?.stat_modifiers ?? null,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) });

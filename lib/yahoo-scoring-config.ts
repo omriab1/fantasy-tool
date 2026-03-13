@@ -267,21 +267,42 @@ const YAHOO_NAME_TO_STAT_ID: Record<string, number> = {
 };
 
 /**
- * Yahoo returns "arrays" as objects: { "0": item, "1": item, ..., "count": N }.
- * This helper normalises both real arrays and that object format to unknown[].
+ * Normalize a Yahoo stat list to an array of plain stat objects.
+ *
+ * Yahoo ?format=json sends stats in one of two formats:
+ *   Format A (confirmed): stats = [ {stat:{stat_id,enabled,…}}, … ]  ← real JS array of wrappers
+ *   Format B (fallback):  stats = {"0":{stat:{…}}, "count": N}        ← fake-array of wrappers
+ *
+ * Both formats wrap each stat in a {stat:{…}} object.
+ * This function normalises both into a plain array of stat objects
+ * (i.e. unwraps the {stat:{…}} wrapper so callers get {stat_id, enabled, …} directly).
  */
-function yahooObjToArray(raw: unknown): unknown[] {
-  if (Array.isArray(raw)) return raw;
-  if (raw && typeof raw === "object") {
-    const o = raw as Record<string, unknown>;
-    const count = Number(o.count ?? 0);
-    const result: unknown[] = [];
+function yahooStatArray(statsContainer: unknown): unknown[] {
+  let raw: unknown[];
+
+  if (Array.isArray(statsContainer)) {
+    // Format A: already a real JS array
+    raw = statsContainer;
+  } else if (statsContainer && typeof statsContainer === "object") {
+    // Format B: fake-array {"0":{stat:{…}}, "count": N}
+    const obj = statsContainer as Record<string, unknown>;
+    const count = Number(obj.count ?? 0);
+    raw = [];
     for (let i = 0; i < count; i++) {
-      if (o[String(i)] !== undefined) result.push(o[String(i)]);
+      if (obj[String(i)] !== undefined) raw.push(obj[String(i)]);
     }
-    return result;
+  } else {
+    return [];
   }
-  return [];
+
+  // Unwrap the {stat:{…}} wrapper that Yahoo puts around every stat entry
+  return raw.map(item => {
+    if (item && typeof item === "object") {
+      const o = item as Record<string, unknown>;
+      if (o.stat && typeof o.stat === "object") return o.stat;
+    }
+    return item;
+  });
 }
 
 /**
@@ -290,8 +311,8 @@ function yahooObjToArray(raw: unknown): unknown[] {
 export function parseYahooLeagueScoringConfig(yahooSettings: unknown): LeagueScoringConfig {
   try {
     const settings = yahooSettings as Record<string, unknown>;
-    const statCats = yahooObjToArray((settings?.stat_categories as Record<string, unknown>)?.stats);
-    const statMods = yahooObjToArray((settings?.stat_modifiers as Record<string, unknown>)?.stats);
+    const statCats = yahooStatArray((settings?.stat_categories as Record<string, unknown>)?.stats);
+    const statMods = yahooStatArray((settings?.stat_modifiers as Record<string, unknown>)?.stats);
 
     if (statCats.length === 0) {
       return YAHOO_NBA_DEFAULT_SCORING_CONFIG;
@@ -302,9 +323,7 @@ export function parseYahooLeagueScoringConfig(yahooSettings: unknown): LeagueSco
 
     if (isPoints) {
       const pointValues: Record<number, number> = {};
-      for (const mod of statMods) {
-        const s = (mod as Record<string, unknown>).stat as Record<string, unknown> | undefined;
-        if (!s) continue;
+      for (const s of statMods as Record<string, unknown>[]) {
         const sid = Number(s.stat_id);
         const val = parseFloat(String(s.value ?? "0"));
         if (!isNaN(sid) && !isNaN(val) && val !== 0) {
@@ -316,16 +335,13 @@ export function parseYahooLeagueScoringConfig(yahooSettings: unknown): LeagueSco
 
     // Category league: build cats from enabled stat_categories
     const cats: ScoringCat[] = [];
-    for (const entry of statCats) {
-      const s = (entry as Record<string, unknown>).stat as Record<string, unknown> | undefined;
-      if (!s) continue;
-
-      const enabled = String(s.enabled ?? "1") === "1";
-      const isDisplay = String(s.is_only_display_stat ?? "0") === "1";
+    for (const entry of statCats as Record<string, unknown>[]) {
+      const enabled = String(entry.enabled ?? "1") === "1";
+      const isDisplay = String(entry.is_only_display_stat ?? "0") === "1";
       if (!enabled || isDisplay) continue;
 
-      const displayName = String(s.display_name ?? "").trim().toUpperCase();
-      const sid = Number(s.stat_id);
+      const displayName = String(entry.display_name ?? "").trim().toUpperCase();
+      const sid = Number(entry.stat_id);
 
       // Try to find by display_name first, then by stat_id
       const mappedId = YAHOO_NAME_TO_STAT_ID[displayName] ?? (YAHOO_NBA_STAT_MAP[sid] ? sid : undefined);
