@@ -148,6 +148,7 @@ export default function MatchupPage() {
 
   const [mode, setMode] = useState<MatchupMode>("projected");
   const [hasCalculated, setHasCalculated] = useState(false);
+  const [calculateCount, setCalculateCount] = useState(0);
 
   // requestedPeriod: null = fetch current period (server default), number = specific period
   const [requestedPeriod, setRequestedPeriod] = useState<number | null>(null);
@@ -406,7 +407,7 @@ export default function MatchupPage() {
       resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       shouldScrollRef.current = false;
     }
-  }, [myStats, hasCalculated, statsWindow, mode]);
+  }, [myStats, hasCalculated, statsWindow, mode, calculateCount]);
 
   // ── Period selector helpers ────────────────────────────────────────────────
 
@@ -557,7 +558,7 @@ export default function MatchupPage() {
             {matchupData && !isPastMatchup && (
               <div className="flex justify-end">
                 <button
-                  onClick={() => { shouldScrollRef.current = true; setHasCalculated(true); }}
+                  onClick={() => { shouldScrollRef.current = true; setHasCalculated(true); setCalculateCount((c) => c + 1); }}
                   disabled={isLoading}
                   className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-1.5 rounded-lg text-sm transition-colors"
                 >
