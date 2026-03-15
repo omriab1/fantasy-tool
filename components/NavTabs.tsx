@@ -7,12 +7,13 @@ import { useSportConfig } from "@/hooks/useSportConfig";
 import type { FantasyProvider } from "@/lib/types";
 
 const TABS = [
-  { lines: ["Trade", "Analyzer"], href: "/trade" },
-  { lines: ["Compare", "Teams"],  href: "/compare" },
-  { lines: ["Power", "Ranking"],  href: "/power" },
+  { lines: ["Trade", "Analyzer"],  href: "/trade" },
+  { lines: ["Compare", "Teams"],   href: "/compare" },
+  { lines: ["Power", "Ranking"],   href: "/power" },
+  { lines: ["Matchup", "Planner"], href: "/matchup" },
   // AI Coach hidden — to re-enable: uncomment the line below
   // { lines: ["AI", "Coach"],       href: "/coach", soon: true },
-  { lines: ["Settings"],          href: "/settings" },
+  { lines: ["Settings"],           href: "/settings" },
 ];
 
 /** Read the active fantasy provider from localStorage (SSR-safe). */

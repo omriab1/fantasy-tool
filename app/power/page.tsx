@@ -471,7 +471,7 @@ export default function PowerPage() {
   const noSettings = provider === "yahoo"
     ? !yahooLeagueKey || (!yahooB && !yahooAccessToken)
     : !leagueId || !espnS2 || !swid;
-  const numWeeks = endPeriod - startPeriod + 1;
+  const numMatchups = endPeriod - startPeriod + 1;
   const rosterReady = players.length > 0 && !playersLoading;
 
   return (
@@ -525,7 +525,7 @@ export default function PowerPage() {
                       : "text-gray-400 hover:text-white border border-white/10 hover:border-white/20"
                   }`}
                 >
-                  By Weeks
+                  By Matchups
                 </button>
                 <button
                   onClick={() => setMode("roster")}
@@ -551,7 +551,7 @@ export default function PowerPage() {
                   onEndChange={setEndPeriod}
                 />
                 <p className="mt-2 text-xs text-gray-600">
-                  {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                  {numMatchups} matchup{numMatchups !== 1 ? "s" : ""} — totals averaged across selected range
                 </p>
               </>
             )}
@@ -592,15 +592,26 @@ export default function PowerPage() {
                   {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
                 </p>
 
-                {/* By-Weeks: quick week selects */}
+                {/* By-Matchups: quick selects */}
                 {mode === "weeks" && (
                   <>
                     <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
                       <span className="text-xs text-gray-500 shrink-0">Quick select:</span>
+                      <button
+                        onClick={() => { setStartPeriod(league.scoringPeriodId); setEndPeriod(league.scoringPeriodId); }}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                          startPeriod === league.scoringPeriodId && endPeriod === league.scoringPeriodId
+                            ? "bg-[#e8193c] border-[#e8193c] text-white"
+                            : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                        }`}
+                      >
+                        Current Matchup
+                      </button>
                       {[1, 2, 3, 4, 6, 8].map((n) => {
                         const lastEnd = Math.max(1, league.scoringPeriodId - 1);
                         const presetStart = Math.max(1, lastEnd - n + 1);
-                        const active = startPeriod === presetStart && endPeriod === lastEnd;
+                        const isCurrent = startPeriod === league.scoringPeriodId && endPeriod === league.scoringPeriodId;
+                        const active = !isCurrent && startPeriod === presetStart && endPeriod === lastEnd;
                         return (
                           <button
                             key={n}
@@ -609,14 +620,15 @@ export default function PowerPage() {
                               active ? "bg-[#e8193c] border-[#e8193c] text-white" : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
                             }`}
                           >
-                            Last {n}w
+                            Last {n}m
                           </button>
                         );
                       })}
                       <button
                         onClick={() => { setStartPeriod(1); setEndPeriod(Math.max(1, league.scoringPeriodId - 1)); }}
                         className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                          startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1)
+                          startPeriod === 1 && endPeriod === Math.max(1, league.scoringPeriodId - 1) &&
+                          !(startPeriod === league.scoringPeriodId && endPeriod === league.scoringPeriodId)
                             ? "bg-[#e8193c] border-[#e8193c] text-white"
                             : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
                         }`}
@@ -625,7 +637,7 @@ export default function PowerPage() {
                       </button>
                     </div>
                     <p className="text-xs text-gray-600 text-center">
-                      {numWeeks} matchup week{numWeeks !== 1 ? "s" : ""} — weekly totals averaged across selected range
+                      {numMatchups} matchup{numMatchups !== 1 ? "s" : ""} — totals averaged across selected range · quick select uses completed matchups only (besides Current Matchup)
                     </p>
                   </>
                 )}

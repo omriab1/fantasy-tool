@@ -22,6 +22,12 @@ const OPTIONS = [
     title: "Power Ranking",
     description: "Full round-robin simulation — see how every team stacks up against every other.",
   },
+  {
+    href: "/matchup",
+    emoji: "📅",
+    title: "Matchup Planner",
+    description: "Project your head-to-head matchup result for this week using per-game averages.",
+  },
   // AI Coach hidden — code preserved in app/coach/page.tsx + app/api/ai/coach/route.ts + lib/ai-providers.ts + lib/coach-prompts.ts
   // To re-enable: uncomment the line below and remove the redirect() in app/coach/page.tsx
   // { href: "/coach", emoji: "🤖", title: "AI Coach", description: "Weekly matchup insights and daily waiver pickups powered by AI.", soon: true },
