@@ -5,6 +5,7 @@ import { useFantasyLeague } from "@/hooks/useFantasyLeague";
 import { useFantasyPlayers } from "@/hooks/useFantasyPlayers";
 import { calcTradeScore } from "@/lib/trade-score";
 import { fmt } from "@/lib/stat-calculator";
+import { scoringConfigLabel } from "@/lib/scoring-config";
 import { SPORT_CONFIGS } from "@/lib/sports-config";
 import { StatsWindowTabs } from "@/components/StatsWindowTabs";
 import { CategoryTable } from "@/components/CategoryTable";
@@ -146,6 +147,7 @@ export default function MatchupPage() {
   const [yahooGuid, setYahooGuid] = useState("");
 
   const [mode, setMode] = useState<MatchupMode>("projected");
+  const [hasCalculated, setHasCalculated] = useState(false);
 
   // requestedPeriod: null = fetch current period (server default), number = specific period
   const [requestedPeriod, setRequestedPeriod] = useState<number | null>(null);
@@ -158,6 +160,8 @@ export default function MatchupPage() {
   const [selectedMyTeamId, setSelectedMyTeamId] = useState<number | null>(null);
   const [selectedOpponentId, setSelectedOpponentId] = useState<number | null>(null);
   const loadedPeriodRef = useRef<number | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const shouldScrollRef = useRef(false);
 
   // ── Read settings ──────────────────────────────────────────────────────────
 
@@ -396,6 +400,14 @@ export default function MatchupPage() {
     return calcTradeScore(myStats, oppStats, scoringConfig);
   }, [myStats, oppStats, scoringConfig]);
 
+  // ── Scroll to results when stat window or mode changes ────────────────────
+  useEffect(() => {
+    if (hasCalculated && shouldScrollRef.current) {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      shouldScrollRef.current = false;
+    }
+  }, [myStats, hasCalculated, statsWindow, mode]);
+
   // ── Period selector helpers ────────────────────────────────────────────────
 
   const displayedPeriod = requestedPeriod ?? matchupData?.matchupPeriodId;
@@ -474,7 +486,7 @@ export default function MatchupPage() {
 
               <StatsWindowTabs
                 value={statsWindow}
-                onChange={setStatsWindow}
+                onChange={(w) => { if (hasCalculated) shouldScrollRef.current = true; setStatsWindow(w); }}
                 availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
                 size="md"
               />
@@ -513,7 +525,7 @@ export default function MatchupPage() {
                   {(["rest", "projected"] as MatchupMode[]).map((m) => (
                     <button
                       key={m}
-                      onClick={() => setMode(m)}
+                      onClick={() => { if (hasCalculated) shouldScrollRef.current = true; setMode(m); }}
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                         mode === m
                           ? "bg-[#e8193c] text-white"
@@ -540,16 +552,62 @@ export default function MatchupPage() {
                 )}
               </div>
             )}
+
+            {/* Calculate button */}
+            {matchupData && !isPastMatchup && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => { shouldScrollRef.current = true; setHasCalculated(true); }}
+                  disabled={isLoading}
+                  className="bg-[#e8193c] hover:bg-[#c41234] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold px-6 py-1.5 rounded-lg text-sm transition-colors"
+                >
+                  {isLoading ? "Loading…" : "Calculate"}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Loading player projections (not needed for past matchups) */}
-          {isLoading && !isPastMatchup && (
+          {hasCalculated && isLoading && !isPastMatchup && (
             <div className="text-center py-6 text-gray-500 text-sm">Loading player projections…</div>
           )}
 
           {/* Results */}
-          {(!isLoading || isPastMatchup) && myStats && (
-            <div className="space-y-4">
+          {hasCalculated && myStats && (
+            <div ref={resultsRef} className="space-y-4 scroll-mt-14">
+              {/* Scoring config label */}
+              <p className="text-center text-xs text-gray-600">
+                {sportConfig.name} · {scoringConfigLabel(scoringConfig)}
+              </p>
+
+              {/* Quick stat window selector */}
+              {!isPastMatchup && (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <span className="text-xs text-gray-500 shrink-0">Stats window:</span>
+                    <StatsWindowTabs
+                      value={statsWindow}
+                      onChange={setStatsWindow}
+                      availableWindows={provider === "yahoo" ? ["season", "30", "14", "7"] : sportConfig.availableWindows}
+                    />
+                  </div>
+                  {/* Mode description note */}
+                  {mode === "projected" ? (
+                    <p className="text-xs text-gray-600">
+                      {matchupData && matchupData.daysRemaining > 0
+                        ? `Projected Score · Actual stats accumulated so far + projected remaining games (excl. IR) · ${matchupData.daysRemaining} day${matchupData.daysRemaining === 1 ? "" : "s"} left`
+                        : "Projected Score · Based on actual final matchup stats (matchup complete)"}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-600">
+                      Rest of Matchup · Projected totals for remaining games based on current roster (excl. IR)
+                      {matchupData && matchupData.daysRemaining > 0
+                        ? ` · ${matchupData.daysRemaining} day${matchupData.daysRemaining === 1 ? "" : "s"} left`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+              )}
               {scoringConfig.format === "roto" ? (
                 <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-5">
                   <RotoProjection myStats={myStats} myName={myTeamName} scoringConfig={scoringConfig} />
