@@ -409,6 +409,12 @@ export default function MatchupPage() {
     }
   }, [myStats, hasCalculated, statsWindow, mode, calculateCount]);
 
+  // ── Reset calculated state when period changes ────────────────────────────
+  useEffect(() => {
+    setHasCalculated(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedPeriod]);
+
   // ── Period selector helpers ────────────────────────────────────────────────
 
   const displayedPeriod = requestedPeriod ?? matchupData?.matchupPeriodId;
